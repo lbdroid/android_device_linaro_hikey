@@ -34,6 +34,9 @@ PRODUCT_COPY_FILES += \
 # Build HiKey960 HDMI audio HAL. Experimental only may not work. FIXME
 PRODUCT_PACKAGES += audio.primary.hikey960
 
+# Build HiKey960 USB audio HAL
+PRODUCT_PACKAGES += audio.usb.hikey960
+
 PRODUCT_PACKAGES += gralloc.hikey960
 
 PRODUCT_PACKAGES += power.hikey960

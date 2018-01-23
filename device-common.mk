@@ -36,9 +36,9 @@ PRODUCT_RUNTIMES := runtime_libart_default
 
 # Build default bluetooth a2dp and usb audio HALs
 PRODUCT_PACKAGES += audio.a2dp.default \
-		    audio.usb.default \
 		    audio.r_submix.default \
-		    tinyplay
+		    tinyplay \
+                    tinycap
 
 PRODUCT_PACKAGES += \
     android.hardware.audio@2.0-impl \
@@ -172,7 +172,7 @@ PRODUCT_COPY_FILES += \
     device/linaro/hikey/audio/audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_configuration.xml \
     frameworks/av/services/audiopolicy/config/a2dp_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/a2dp_audio_policy_configuration.xml \
     frameworks/av/services/audiopolicy/config/r_submix_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/r_submix_audio_policy_configuration.xml \
-    frameworks/av/services/audiopolicy/config/usb_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/usb_audio_policy_configuration.xml \
+    device/linaro/hikey/usbaudio/usb_audio_policy_configuration.xml:$(TARGET_COPY_OUT_VENDOR)/etc/usb_audio_policy_configuration.xml \
     frameworks/av/services/audiopolicy/config/default_volume_tables.xml:$(TARGET_COPY_OUT_VENDOR)/etc/default_volume_tables.xml \
     frameworks/av/services/audiopolicy/config/audio_policy_volumes.xml:$(TARGET_COPY_OUT_VENDOR)/etc/audio_policy_volumes.xml
 

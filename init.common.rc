@@ -1,5 +1,6 @@
 import init.${ro.hardware}.usb.rc
 import init.${ro.hardware}.power.rc
+import init.car.rc
 
 on init
     # mount debugfs

@@ -33,6 +33,7 @@ USE_CAMERA_STUB := true
 TARGET_USERIMAGES_USE_EXT4 := true
 BOARD_CACHEIMAGE_FILE_SYSTEM_TYPE := ext4
 TARGET_USE_PAN_DISPLAY := true
+TARGET_USES_CAR_FUTURE_FEATURES := true
 
 TARGET_USES_HWC2 := true
 SF_START_GRAPHICS_ALLOCATOR_SERVICE := true
@@ -41,6 +42,11 @@ TARGET_AUX_OS_VARIANT_LIST := neonkey argonkey
 
 BOARD_SEPOLICY_DIRS += device/linaro/hikey/sepolicy
 BOARD_SEPOLICY_DIRS += system/bt/vendor_libs/linux/sepolicy
+
+# Add car related sepolicy.
+BOARD_SEPOLICY_DIRS += \
+    device/generic/car/common/sepolicy \
+    packages/services/Car/car_product/sepolicy
 
 DEVICE_MANIFEST_FILE := device/linaro/hikey/manifest.xml
 DEVICE_MATRIX_FILE := device/linaro/hikey/compatibility_matrix.xml

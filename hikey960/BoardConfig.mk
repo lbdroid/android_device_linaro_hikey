@@ -8,8 +8,8 @@ TARGET_2ND_CPU_VARIANT := cortex-a73
 
 TARGET_NO_DTIMAGE := false
 
-BOARD_KERNEL_CMDLINE := androidboot.hardware=hikey960 console=ttyFIQ0 androidboot.console=ttyFIQ0
-BOARD_KERNEL_CMDLINE += firmware_class.path=/system/etc/firmware loglevel=15
+BOARD_KERNEL_CMDLINE := androidboot.hardware=hikey960 console=ttyFIQ0 androidboot.console=ttyFIQ0 androidboot.selinux=permissive
+BOARD_KERNEL_CMDLINE += firmware_class.path=/system/etc/firmware loglevel=15 video=HDMI-A-1:1280x800@60
 ifneq ($(TARGET_SENSOR_MEZZANINE),)
 BOARD_KERNEL_CMDLINE += overlay_mgr.overlay_dt_entry=hardware_cfg_$(TARGET_SENSOR_MEZZANINE)
 endif
