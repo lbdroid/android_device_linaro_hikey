@@ -31,7 +31,6 @@
 #include <cutils/properties.h>
 
 #include <hardware/audio.h>
-//#include "audio_alsaops.h"
 #include <hardware/audio_alsaops.h>
 #include <hardware/hardware.h>
 
@@ -39,8 +38,7 @@
 
 #include <tinyalsa/asoundlib.h>
 
-//#include <webrtc/modules/audio_processing/include/audio_processing.h>
-//#include <webrtc/modules/include/module_common_types.h>
+#include "webrtc_wrapper.h"
 
 #include <audio_utils/channels.h>
 #include <audio_utils/resampler.h>
@@ -48,9 +46,6 @@
 #include "alsa_device_profile.h"
 #include "alsa_device_proxy.h"
 #include "alsa_logging.h"
-
-//#include "proxy.h"
-//#include "profile.h"
 
 #define AUDIO_PARAMETER_HFP_ENABLE            "hfp_enable"
 #define AUDIO_PARAMETER_HFP_SET_SAMPLING_RATE "hfp_set_sampling_rate"
@@ -115,8 +110,6 @@
 
 /* Lock play & record samples rates at or above this threshold */
 #define RATELOCK_THRESHOLD 96000
-
-//namespace webrtc {
 
 struct audio_device {
     struct audio_hw_device hw_device;
@@ -1239,6 +1232,11 @@ void* runsco(void * args) {
     struct resampler_itfe *resampler_to48;
     struct resampler_itfe *resampler_from48;
 
+/* TODO: Enable audio processing
+    struct audioproc *apm = audioproc_create();
+    struct audioframe *frame = audioframe_create(1, adev->sco_samplerate, adev->sco_samplerate / 100);
+*/
+
     struct pcm_config bt_config = {
         .channels = 2,
         .rate = adev->sco_samplerate,
@@ -1382,6 +1380,18 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
         return NULL;
     }
 
+/* TODO enable audio processing
+    // Setup audio processing
+    audioproc_hpf_en(apm, 1);
+    audioproc_aec_drift_comp_en(apm, 0);
+    audioproc_aec_en(apm, 1);
+    audioproc_ns_set_level(apm, 1); // 0 = low, 1 = moderate, 2 = high, 3 = veryhigh
+    audioproc_ns_en(apm, 1);
+    audioproc_agc_set_level_limits(apm, 0, 255);
+    audioproc_agc_set_mode(apm, 0); // 0 = Adaptive Analog, 1 = Adaptive Digital, 2 = Fixed Digital
+    audioproc_agc_en(apm, 1);
+*/
+
     ALOGD("%s: PCM loop starting", __func__);
 
     memset(framebuf_far_stereo, 0, block_len_bytes_far_stereo);
@@ -1396,7 +1406,10 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
 //        fwrite(framebuf_far_mono, 1, block_len_bytes_far_mono, in_far);
 //        in_far_frames += 80;
 
-        //TODO AnalyzeReverseStream
+/* TODO enable audio processing
+	audioframe_setdata(frame, &framebuf_far_mono, frames_per_block_far);
+        audioproc_aec_echo_ref(apm, &frame);
+*/
 
         memset(framebuf_near_mono, 0, block_len_bytes_near_mono);
         resampler_to48->resample_from_input(resampler_to48, (int16_t *)framebuf_far_mono, (size_t *)&frames_per_block_far, (int16_t *) framebuf_near_mono, (size_t *)&frames_per_block_near);
@@ -1426,7 +1439,11 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
 //        fwrite(framebuf_far_mono, 1, block_len_bytes_far_mono, out_far);
 //        out_far_frames += 80;
 
-        //TODO ProcessStream
+/* TODO enable audio processing
+	audioframe_setdata(frame, &framebuf_far_mono, frames_per_block_far);
+        audioproc_process(apm, frame);
+	audioframe_getdata(frame, &framebuf_far_mono, frames_per_block_far);
+*/
 
         memset(framebuf_far_stereo, 0, block_len_bytes_far_stereo);
         adjust_channels(framebuf_far_mono, 1, framebuf_far_stereo, 2, 2, block_len_bytes_far_mono);
@@ -1493,89 +1510,6 @@ fclose(out_far);
 
     return NULL;
 
- /*
-    // Our frame manager
-    AudioFrame frame;
-    frame.num_channels_ = 1;
-    frame.sample_rate_hz_ = 8000;
-    frame.samples_per_channel_ = 8000/100;
-
-    // Get the size of our frames
-    const size_t frameLength = frame.samples_per_channel_*1;
-
-    AudioProcessing* apm = AudioProcessing::Create();
-    //
-//    apm->set_sample_rate_hz(8000); // Super-wideband processing.
-    //
-    // // Mono capture and stereo render.
-//    apm->set_num_channels(1, 1);
-//    apm->set_num_reverse_channels(1);
-    //
-    apm->high_pass_filter()->Enable(true);
-    //
-    //apm->echo_cancellation()->set_suppression_level( EchoCancellation::SuppressionLevel::kHighSuppression );
-    apm->echo_cancellation()->enable_drift_compensation( false );
-    apm->echo_cancellation()->Enable( true );
-    //
-    apm->noise_suppression()->set_level( NoiseSuppression::Level::kHigh );
-    apm->noise_suppression()->Enable( true );
-    //
-    apm->gain_control()->set_analog_level_limits( 0, 255 );
-    apm->gain_control()->set_mode( GainControl::Mode::kAdaptiveDigital );
-    apm->gain_control()->Enable( true );
-    //
-    // apm->voice_detection()->Enable(true);
-    //
-    // // Start a voice call...
-
-//    while( fread(frame._payloadData, sizeof( int16_t ), frameLength, infile )==frameLength )
-    while (fread(frame.data_, sizeof(int16_t), frameLength, infile) == frameLength)
-    {
-        //apm->set_stream_delay_ms( 0 );
-
-//TODO: feed it an input frame read from BT
-        apm->AnalyzeReverseStream( &frame );
-//TODO: write that frame to speakers
-//
-        //
-        // // ... Render frame arrives bound for the audio HAL ...
-        //
-        // // ... Capture frame arrives from the audio HAL ...
-        // // Call required set_stream_ functions.
-        // apm->gain_control()->set_stream_analog_level(analog_level);
-        //
-
-//TODO: delay probably should be 2*out_get_latency
-        apm->set_stream_delay_ms( 300 );
-
-//TODO: feed it a frame read from microphone
-        int err = apm->ProcessStream( &frame );
-
-
-        fprintf( stdout, "Output %i\n", err );
-        //
-        // // Call required stream_ functions.
-        // analog_level = apm->gain_control()->stream_analog_level();
-        // has_voice = apm->stream_has_voice();
-
-//TODO: write this to BT
-//        fwrite( frame._payloadData, sizeof( int16_t ), frameLength, outfile );
-        fwrite(frame.data_, sizeof(int16_t), frameLength, outfile);
-    }
-
-    //
-    // // Repeate render and capture processing for the duration of the call...
-    // // Start a new call...
-    // apm->Initialize();
-    //
-    // // Close the application...
-    //AudioProcessing::Destroy( apm );
-    delete apm;
-    apm = NULL;
-
-    fclose( infile );
-    fclose( outfile );
-*/
 }
 
 /*
@@ -1782,4 +1716,3 @@ struct audio_module HAL_MODULE_INFO_SYM = {
     },
 };
 
-//}

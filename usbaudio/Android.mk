@@ -20,15 +20,16 @@ LOCAL_MODULE := audio.usb.$(TARGET_BOARD_PLATFORM)
 LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_PROPRIETARY_MODULE := true
 LOCAL_SRC_FILES := \
-	audio_hal.c
+	audio_hal.c \
+	webrtc_wrapper.cpp
 LOCAL_C_INCLUDES += \
 	external/tinyalsa/include \
 	$(call include-path-for, audio-utils) \
 	$(call include-path-for, alsa-utils)
-LOCAL_SHARED_LIBRARIES := liblog libcutils libtinyalsa libaudioutils libalsautils
+LOCAL_SHARED_LIBRARIES := liblog libcutils libtinyalsa libaudioutils libalsautils libwebrtc_audio_preprocessing
 LOCAL_MODULE_TAGS := optional
-LOCAL_CFLAGS := -Wno-unused-parameter
+LOCAL_CFLAGS := -Wno-unused-parameter -DWEBRTC_POSIX -DWEBRTC_LINUX -DWEBRTC_THREAD_RR -DWEBRTC_CLOCK_TYPE_REALTIME -DWEBRTC_ANDROID
 
-LOCAL_HEADER_LIBRARIES += libhardware_headers
+LOCAL_HEADER_LIBRARIES += libhardware_headers libwebrtc_headers
 include $(BUILD_SHARED_LIBRARY)
 
