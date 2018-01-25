@@ -521,6 +521,8 @@ static ssize_t out_write(struct audio_stream_out *stream, const void* buffer, si
     int ret;
     struct stream_out *out = (struct stream_out *)stream;
 
+    if (out->adev->sco_thread != 0) return bytes;
+
     stream_lock(&out->lock);
     if (out->standby) {
         device_lock(out->adev);
@@ -941,6 +943,8 @@ static ssize_t in_read(struct audio_stream_in *stream, void* buffer, size_t byte
 
     struct stream_in * in = (struct stream_in *)stream;
 
+    if (in->adev->sco_thread != 0) return bytes;
+
     stream_lock(&in->lock);
     if (in->standby) {
         device_lock(in->adev);
@@ -1319,6 +1323,21 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
 
     ALOGD("%s: USBCARD: %d, BTCARD: %d", __func__, adev->usbcard, adev->btcard);
 
+    // Put all existing streams into standby (closed). Note that when sco thread is running
+    // out_write and in_read functions will bail immediately while pretending to work and
+    // not opening the pcm's.
+    struct listnode* node;
+
+    list_for_each(node, &adev->output_stream_list) {
+        struct audio_stream* stream = (struct audio_stream *)node_to_item(node, struct stream_out, list_node);
+        out_standby((struct audio_stream_out *)stream);
+    }
+
+    list_for_each(node, &adev->input_stream_list) {
+        struct audio_stream* stream = (struct audio_stream *)node_to_item(node, struct stream_in, list_node);
+        in_standby((struct audio_stream_in *)stream);
+    }
+
     adev->sco_pcm_far_in = pcm_open(adev->btcard, 0, PCM_IN, &bt_config);
     if (adev->sco_pcm_far_in == 0) {
         ALOGD("%s: failed to allocate memory for PCM far/in", __func__);
@@ -1392,10 +1411,6 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
         pcm_close(adev->sco_pcm_near_out);
         pcm_close(adev->sco_pcm_far_in);
         pcm_close(adev->sco_pcm_far_out);
-        adev->sco_pcm_near_in = 0;
-        adev->sco_pcm_near_out = 0;
-        adev->sco_pcm_far_in = 0;
-        adev->sco_pcm_far_out = 0;
         return NULL;
     }
 
@@ -1403,6 +1418,10 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
     if (rc != 0) {
         resampler_to48 = NULL;
         ALOGD("%s: echo_reference_write() failure to create resampler %d", __func__, rc);
+        pcm_close(adev->sco_pcm_near_in);
+        pcm_close(adev->sco_pcm_near_out);
+        pcm_close(adev->sco_pcm_far_in);
+        pcm_close(adev->sco_pcm_far_out);
         return NULL;
     }
 
@@ -1410,6 +1429,10 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
     if (rc != 0) {
         resampler_from48 = NULL;
         ALOGD("%s: echo_reference_write() failure to create resampler %d", __func__, rc);
+        pcm_close(adev->sco_pcm_near_in);
+        pcm_close(adev->sco_pcm_near_out);
+        pcm_close(adev->sco_pcm_far_in);
+        pcm_close(adev->sco_pcm_far_out);
         return NULL;
     }
 
