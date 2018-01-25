@@ -56,6 +56,8 @@
 
 #define AUDIO_PARAMETER_CARD "card"
 
+#define AUDIO_PARAMETER_LINEIN "line_in_ctl"
+
 #define DEFAULT_INPUT_BUFFER_SIZE_MS 20
 
 /* TODO
@@ -129,6 +131,7 @@ struct audio_device {
     uint32_t device_sample_rate;
 
     bool mic_muted;
+    bool line_in;
 
     bool standby;
 
@@ -146,6 +149,10 @@ struct audio_device {
     int sco_samplerate;
 
     bool terminate_sco;
+
+    struct mixer *hw_mixer;
+    float *vol_balance;
+    float master_volume;
 };
 
 struct stream_lock {
@@ -1179,6 +1186,20 @@ static void adev_close_input_stream(struct audio_hw_device *hw_dev,
     free(stream);
 }
 
+
+void set_line_in(struct audio_hw_device *hw_dev){
+    struct audio_device * adev = (struct audio_device *)hw_dev;
+    if (adev->hw_mixer == 0) adev->hw_mixer = mixer_open(adev->usbcard);
+    if (adev->hw_mixer == 0) return;
+    struct mixer_ctl *line_in_ctl = mixer_get_ctl_by_name(adev->hw_mixer, "Line Playback Switch");
+
+    if (adev->line_in && adev->sco_thread == 0){
+        mixer_ctl_set_value(line_in_ctl, 0, 1);
+    } else {
+        mixer_ctl_set_value(line_in_ctl, 0, 0);
+    }
+}
+
 void stereo_to_mono(int16_t *stereo, int16_t *mono, size_t samples){
     // Converts interleaved stereo into mono by discarding second channel
     int i;
@@ -1311,8 +1332,10 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
     adev->sco_pcm_far_out = pcm_open(adev->btcard, 0, PCM_OUT, &bt_config);
     if (adev->sco_pcm_far_out == 0) {
         ALOGD("%s: failed to allocate memory for PCM far/out", __func__);
+        pcm_close(adev->sco_pcm_far_in);
         return NULL;
     } else if (!pcm_is_ready(adev->sco_pcm_far_out)){
+        pcm_close(adev->sco_pcm_far_in);
         pcm_close(adev->sco_pcm_far_out);
         ALOGD("%s: failed to open PCM far/out", __func__);
         return NULL;
@@ -1321,8 +1344,12 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
     adev->sco_pcm_near_in = pcm_open(adev->usbcard, 0, PCM_IN, &usb_config);
     if (adev->sco_pcm_near_in == 0) {
         ALOGD("%s: failed to allocate memory for PCM near/in", __func__);
+        pcm_close(adev->sco_pcm_far_in);
+        pcm_close(adev->sco_pcm_far_out);
         return NULL;
     } else if (!pcm_is_ready(adev->sco_pcm_near_in)){
+        pcm_close(adev->sco_pcm_far_in);
+        pcm_close(adev->sco_pcm_far_out);
         pcm_close(adev->sco_pcm_near_in);
         ALOGD("%s: failed to open PCM near/in", __func__);
         return NULL;
@@ -1331,8 +1358,14 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
     adev->sco_pcm_near_out = pcm_open(adev->usbcard, 0, PCM_OUT, &usb_config);
     if (adev->sco_pcm_near_out == 0) {
         ALOGD("%s: failed to allocate memory for PCM near/out", __func__);
+        pcm_close(adev->sco_pcm_far_in);
+        pcm_close(adev->sco_pcm_far_out);
+        pcm_close(adev->sco_pcm_near_in);
         return NULL;
     } else if (!pcm_is_ready(adev->sco_pcm_near_out)){
+        pcm_close(adev->sco_pcm_far_in);
+        pcm_close(adev->sco_pcm_far_out);
+        pcm_close(adev->sco_pcm_near_in);
         pcm_close(adev->sco_pcm_near_out);
         ALOGD("%s: failed to open PCM near/out", __func__);
         return NULL;
@@ -1512,9 +1545,55 @@ fclose(out_far);
 
 }
 
+void set_hfp_volume(struct audio_hw_device *hw_dev, int volume)
+{
+    // value of volume will be between 1 and 15 inclusive
+
+    struct audio_device * adev = (struct audio_device *)hw_dev;
+    if (adev->hw_mixer == 0) adev->hw_mixer = mixer_open(adev->usbcard);
+    if (adev->hw_mixer == 0) return;
+    struct mixer_ctl *vol_ctl = mixer_get_ctl_by_name(adev->hw_mixer, "Speaker Playback Volume");
+    int max = mixer_ctl_get_range_max(vol_ctl);
+    int size = mixer_ctl_get_num_values(vol_ctl);
+    int i;
+
+    for (i=0; i<size; i++){
+        if (i < 2) mixer_ctl_set_value(vol_ctl, i, (int)((float) max * ((float)volume / 15.0)));
+        else mixer_ctl_set_value(vol_ctl, i, 0);
+    }
+}
+
 /*
  * ADEV Functions
  */
+static int adev_set_master_volume(struct audio_hw_device *hw_dev, float volume)
+{
+    // value of volume will be between 0.0 and 1.0 inclusive
+
+    struct audio_device * adev = (struct audio_device *)hw_dev;
+    if (adev->hw_mixer == 0) adev->hw_mixer = mixer_open(adev->usbcard);
+    if (adev->hw_mixer == 0) return 0;
+    struct mixer_ctl *vol_ctl = mixer_get_ctl_by_name(adev->hw_mixer, "Speaker Playback Volume");
+    int max = mixer_ctl_get_range_max(vol_ctl);
+    int size = mixer_ctl_get_num_values(vol_ctl);
+    int i;
+
+    adev->master_volume = volume;
+    if (adev->vol_balance == 0){ // setup default volume balance if not already set
+        adev->vol_balance = malloc(size * sizeof(float));
+        for (i=0; i<size; i++){
+            if (i < 2) adev->vol_balance[i] = 1.0;
+            else if (i < 4) adev->vol_balance[i] = 0.75;
+            else adev->vol_balance[i] = 0.0;
+        }
+    }
+
+    for (i=0; i<size; i++)
+        mixer_ctl_set_value(vol_ctl, i, (int)((float) max * adev->vol_balance[i] * volume));
+
+    return 0; // any return value other than 0 means that master volume becomes software emulated.
+}
+
 static int adev_set_parameters(struct audio_hw_device *hw_dev, const char *kvpairs)
 {
     ALOGD("%s: kvpairs: %s", __func__, kvpairs);
@@ -1547,11 +1626,14 @@ static int adev_set_parameters(struct audio_hw_device *hw_dev, const char *kvpai
             if (adev->sco_thread == 0) {
                 adev->terminate_sco = false;
                 pthread_create(&adev->sco_thread, NULL, &runsco, adev);
+                set_line_in(hw_dev);
             }
         } else {
             if (adev->sco_thread != 0) {
                 adev->terminate_sco = true; // this will cause the thread to exit the main loop and terminate.
                 adev->sco_thread = 0;
+                set_line_in(hw_dev);
+                adev_set_master_volume(hw_dev, adev->master_volume); // reset master volume on termination
             }
         }
         pthread_mutex_unlock(&adev->sco_thread_lock);
@@ -1560,7 +1642,15 @@ static int adev_set_parameters(struct audio_hw_device *hw_dev, const char *kvpai
     ret = str_parms_get_str(parms, AUDIO_PARAMETER_KEY_HFP_VOLUME, value, sizeof(value));
     if (ret >= 0) {
         val = atoi(value);
-        // TODO: set the HFP volume to 'val'
+        set_hfp_volume(hw_dev, val); // val is always 1-15 inclusive
+    }
+
+    ret = str_parms_get_str(parms, AUDIO_PARAMETER_LINEIN, value, sizeof(value));
+    if (ret >= 0){
+        if (strcmp(value, "play") == 0) adev->line_in = true;
+        else adev->line_in = false;
+
+        set_line_in(hw_dev);
     }
 
     return 0;
@@ -1578,12 +1668,7 @@ static int adev_init_check(const struct audio_hw_device *hw_dev)
 
 static int adev_set_voice_volume(struct audio_hw_device *hw_dev, float volume)
 {
-    return -ENOSYS;
-}
-
-static int adev_set_master_volume(struct audio_hw_device *hw_dev, float volume)
-{
-    return -ENOSYS;
+    return -ENOSYS; // this is probably fine, since we will use hfp_volume parameter instead.
 }
 
 static int adev_set_mode(struct audio_hw_device *hw_dev, audio_mode_t mode)
@@ -1655,6 +1740,7 @@ static int adev_dump(const struct audio_hw_device *device, int fd)
 static int adev_close(hw_device_t *device)
 {
     struct audio_device *adev = (struct audio_device *)device;
+    if (adev->hw_mixer != 0) mixer_close(adev->hw_mixer);
     free(device);
 
     return 0;
@@ -1694,6 +1780,11 @@ static int adev_open(const hw_module_t* module, const char* name, hw_device_t** 
     adev->hw_device.open_input_stream = adev_open_input_stream;
     adev->hw_device.close_input_stream = adev_close_input_stream;
     adev->hw_device.dump = adev_dump;
+
+    adev->line_in = false;
+    adev->hw_mixer = 0;
+    adev->vol_balance = 0;
+    adev->master_volume = (float)0.5;
 
     *device = &adev->hw_device.common;
 
