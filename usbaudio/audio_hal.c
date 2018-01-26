@@ -1257,6 +1257,13 @@ void* runsco(void * args) {
     struct resampler_itfe *resampler_to48;
     struct resampler_itfe *resampler_from48;
 
+    int loopcounter = 0;
+    struct timespec hwtime;
+    unsigned int f_read_avail;
+    unsigned int f_read_bytes;
+    unsigned int f_write_avail;
+    unsigned int f_write_bytes;
+
 /* TODO: Enable audio processing
     struct audioproc *apm = audioproc_create();
     struct audioframe *frame = audioframe_create(1, adev->sco_samplerate, adev->sco_samplerate / 100);
@@ -1278,7 +1285,7 @@ void* runsco(void * args) {
         .rate = 48000,
         .format = PCM_FORMAT_S16_LE,
         .period_size = 1024,
-        .period_count = 2,
+        .period_count = 4,
         .start_threshold = 0,
         .silence_threshold = 0,
         .stop_threshold = 0,
@@ -1453,7 +1460,8 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
     memset(framebuf_far_stereo, 0, block_len_bytes_far_stereo);
     while (!adev->terminate_sco && pcm_read(adev->sco_pcm_far_in, framebuf_far_stereo, block_len_bytes_far_stereo) == 0){
 
-        ALOGD("%s: Looping...", __func__);
+//        ALOGD("%s: Looping... #%d", __func__, loopcounter);
+        loopcounter++;
 
         memset(framebuf_far_mono, 0, block_len_bytes_far_mono);
         stereo_to_mono(framebuf_far_stereo, framebuf_far_mono, frames_per_block_far);
@@ -1477,9 +1485,20 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
         memset(framebuf_near_stereo, 0, block_len_bytes_near_stereo);
         adjust_channels(framebuf_near_mono, 1, framebuf_near_stereo, 2, 2, block_len_bytes_near_mono);
 
-        pcm_write(adev->sco_pcm_near_out, framebuf_near_stereo, block_len_bytes_near_stereo);
+        pcm_get_htimestamp(adev->sco_pcm_near_out, &f_write_avail, &hwtime);
+        if (4 * (4096 - f_write_avail) > block_len_bytes_near_stereo) f_write_bytes = block_len_bytes_near_stereo;
+        else f_write_bytes = 4 * (4096 - f_write_avail);
+
+        pcm_write(adev->sco_pcm_near_out, framebuf_near_stereo, f_write_bytes);
         memset(framebuf_near_stereo, 0, block_len_bytes_near_stereo);
-        pcm_read(adev->sco_pcm_near_in, framebuf_near_stereo, block_len_bytes_near_stereo);
+
+        pcm_get_htimestamp(adev->sco_pcm_near_in, &f_read_avail, &hwtime);
+        if ((4*f_read_avail) < block_len_bytes_near_stereo) f_read_bytes = 4 * f_read_avail;
+        else f_read_bytes = block_len_bytes_near_stereo;
+
+        pcm_read(adev->sco_pcm_near_in, framebuf_near_stereo, f_read_bytes);
+
+        ALOGD("%s: near out avail: %d, out written: %d, near in avail: %d, near read: %d. (%d)", __func__, f_write_avail, f_write_bytes/4, f_read_avail, f_read_bytes/4, loopcounter);
 
         memset(framebuf_near_mono, 0, block_len_bytes_near_mono);
         stereo_to_mono(framebuf_near_stereo, framebuf_near_mono, frames_per_block_near);
