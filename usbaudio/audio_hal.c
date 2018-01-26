@@ -1264,10 +1264,9 @@ void* runsco(void * args) {
     unsigned int f_write_avail;
     unsigned int f_write_bytes;
 
-/* TODO: Enable audio processing
+    // AudioProcessing: Initialize
     struct audioproc *apm = audioproc_create();
     struct audioframe *frame = audioframe_create(1, adev->sco_samplerate, adev->sco_samplerate / 100);
-*/
 
     struct pcm_config bt_config = {
         .channels = 2,
@@ -1443,8 +1442,7 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
         return NULL;
     }
 
-/* TODO enable audio processing
-    // Setup audio processing
+    // AudioProcessing: Setup
     audioproc_hpf_en(apm, 1);
     audioproc_aec_drift_comp_en(apm, 0);
     audioproc_aec_en(apm, 1);
@@ -1453,7 +1451,6 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
     audioproc_agc_set_level_limits(apm, 0, 255);
     audioproc_agc_set_mode(apm, 0); // 0 = Adaptive Analog, 1 = Adaptive Digital, 2 = Fixed Digital
     audioproc_agc_en(apm, 1);
-*/
 
     ALOGD("%s: PCM loop starting", __func__);
 
@@ -1470,10 +1467,9 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
 //        fwrite(framebuf_far_mono, 1, block_len_bytes_far_mono, in_far);
 //        in_far_frames += 80;
 
-/* TODO enable audio processing
+        // AudioProcessing: Analyze reverse stream
 	audioframe_setdata(frame, &framebuf_far_mono, frames_per_block_far);
         audioproc_aec_echo_ref(apm, &frame);
-*/
 
         memset(framebuf_near_mono, 0, block_len_bytes_near_mono);
         resampler_to48->resample_from_input(resampler_to48, (int16_t *)framebuf_far_mono, (size_t *)&frames_per_block_far, (int16_t *) framebuf_near_mono, (size_t *)&frames_per_block_near);
@@ -1514,11 +1510,10 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
 //        fwrite(framebuf_far_mono, 1, block_len_bytes_far_mono, out_far);
 //        out_far_frames += 80;
 
-/* TODO enable audio processing
+        // AudioProcessing: Process Audio
 	audioframe_setdata(frame, &framebuf_far_mono, frames_per_block_far);
         audioproc_process(apm, frame);
 	audioframe_getdata(frame, &framebuf_far_mono, frames_per_block_far);
-*/
 
         memset(framebuf_far_stereo, 0, block_len_bytes_far_stereo);
         adjust_channels(framebuf_far_mono, 1, framebuf_far_stereo, 2, 2, block_len_bytes_far_mono);
@@ -1529,6 +1524,9 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
     }
 
     ALOGD("%s: PCM loop terminated", __func__);
+
+    // AudioProcessing: Done
+    audioproc_destroy(apm);
 
 // TEMP FOR FILE WRITE
 /*
