@@ -1638,6 +1638,17 @@ static int adev_set_master_volume(struct audio_hw_device *hw_dev, float volume)
     return 0; // any return value other than 0 means that master volume becomes software emulated.
 }
 
+void adev_set_mic_volume(struct audio_hw_device *hw_dev, int percent)
+{
+    struct audio_device * adev = (struct audio_device *)hw_dev;
+    if (adev->hw_mixer == 0) adev->hw_mixer = mixer_open(adev->usbcard);
+    if (adev->hw_mixer == 0) return 0;
+    struct mixer_ctl *vol_ctl = mixer_get_ctl_by_name(adev->hw_mixer, "Mic Capture Volume");
+    int max = mixer_ctl_get_range_max(vol_ctl);
+
+    mixer_ctl_set_val(vol_ctl, 0, max * percent / 100);
+}
+
 static int adev_set_parameters(struct audio_hw_device *hw_dev, const char *kvpairs)
 {
     ALOGD("%s: kvpairs: %s", __func__, kvpairs);
@@ -1668,6 +1679,7 @@ static int adev_set_parameters(struct audio_hw_device *hw_dev, const char *kvpai
         pthread_mutex_lock(&adev->sco_thread_lock);
         if (strcmp(value, "true") == 0){
             if (adev->sco_thread == 0) {
+                adev_set_mic_volume(hw_dev, 90); // set microphone to 90% of maximum (default is 59%)
                 adev->terminate_sco = false;
                 pthread_create(&adev->sco_thread, NULL, &runsco, adev);
                 set_line_in(hw_dev);
