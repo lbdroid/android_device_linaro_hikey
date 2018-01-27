@@ -56,6 +56,12 @@ void audioproc_aec_set_delay(struct audioproc *apm, int delay){
 	TO_CPP(apm)->set_stream_delay_ms(delay);
 }
 
+void audioproc_aec_delayag_en(struct audioproc *apm){
+        webrtc::Config config;
+        config.Set<webrtc::DelayAgnostic>(new webrtc::DelayAgnostic(true));
+        TO_CPP(apm)->SetExtraOptions(config);
+}
+
 void audioproc_aec_echo_ref(struct audioproc *apm, struct audioframe *frame){
 	TO_CPP(apm)->AnalyzeReverseStream(F_TO_CPP(frame));
 }

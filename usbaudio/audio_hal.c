@@ -1450,10 +1450,11 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
     audioproc_hpf_en(apm, 1);
     audioproc_aec_drift_comp_en(apm, 0);
     audioproc_aec_en(apm, 1);
-    audioproc_ns_set_level(apm, 1); // 0 = low, 1 = moderate, 2 = high, 3 = veryhigh
+    audioproc_aec_delayag_en(apm);
+    audioproc_ns_set_level(apm, 2); // 0 = low, 1 = moderate, 2 = high, 3 = veryhigh
     audioproc_ns_en(apm, 1);
     audioproc_agc_set_level_limits(apm, 0, 255);
-    audioproc_agc_set_mode(apm, 0); // 0 = Adaptive Analog, 1 = Adaptive Digital, 2 = Fixed Digital
+    audioproc_agc_set_mode(apm, 1); // 0 = Adaptive Analog, 1 = Adaptive Digital, 2 = Fixed Digital
     audioproc_agc_en(apm, 1);
 
     ALOGD("%s: PCM loop starting", __func__);
@@ -1595,7 +1596,7 @@ void set_hfp_volume(struct audio_hw_device *hw_dev, int volume)
 
     struct audio_device * adev = (struct audio_device *)hw_dev;
     if (adev->hw_mixer == 0) adev->hw_mixer = mixer_open(adev->usbcard);
-    if (adev->hw_mixer == 0) return;
+    if (adev->hw_mixer > 0) return;
     struct mixer_ctl *vol_ctl = mixer_get_ctl_by_name(adev->hw_mixer, "Speaker Playback Volume");
     int max = mixer_ctl_get_range_max(vol_ctl);
     int size = mixer_ctl_get_num_values(vol_ctl);

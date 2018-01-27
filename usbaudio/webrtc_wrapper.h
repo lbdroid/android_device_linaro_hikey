@@ -19,6 +19,7 @@ extern "C" {
 	void audioproc_aec_drift_comp_en(struct audioproc *apm, int enable);
 	void audioproc_aec_en(struct audioproc *apm, int enable);
 	void audioproc_aec_set_delay(struct audioproc *apm, int delay);
+	void audioproc_aec_delayag_en(struct audioproc *apm);
 	void audioproc_aec_echo_ref(struct audioproc *apm, struct audioframe *frame);
 
 	void audioproc_ns_set_level(struct audioproc *apm, int level);
