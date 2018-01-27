@@ -521,9 +521,11 @@ static ssize_t out_write(struct audio_stream_out *stream, const void* buffer, si
     int ret;
     struct stream_out *out = (struct stream_out *)stream;
 
-    if (out->adev->sco_thread != 0) return bytes;
-
     stream_lock(&out->lock);
+    if (out->adev->sco_thread != 0){
+        stream_unlock(&out->lock);
+        return bytes;
+    }
     if (out->standby) {
         device_lock(out->adev);
         ret = start_output_stream(out);
@@ -943,9 +945,11 @@ static ssize_t in_read(struct audio_stream_in *stream, void* buffer, size_t byte
 
     struct stream_in * in = (struct stream_in *)stream;
 
-    if (in->adev->sco_thread != 0) return bytes;
-
     stream_lock(&in->lock);
+    if (in->adev->sco_thread != 0){
+        stream_unlock(&in->lock);
+        return bytes;
+    }
     if (in->standby) {
         device_lock(in->adev);
         ret = start_input_stream(in);
