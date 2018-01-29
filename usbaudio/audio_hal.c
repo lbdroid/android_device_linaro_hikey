@@ -1473,8 +1473,8 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
 //        in_far_frames += 80;
 
         // AudioProcessing: Analyze reverse stream
-	audioframe_setdata(frame, &framebuf_far_mono, frames_per_block_far);
-        audioproc_aec_echo_ref(apm, &frame);
+        audioframe_setdata(frame, framebuf_far_mono, frames_per_block_far);
+        audioproc_aec_echo_ref(apm, frame);
 
         memset(framebuf_near_mono, 0, block_len_bytes_near_mono);
         resampler_to48->resample_from_input(resampler_to48, (int16_t *)framebuf_far_mono, (size_t *)&frames_per_block_far, (int16_t *) framebuf_near_mono, (size_t *)&frames_per_block_near);
@@ -1516,9 +1516,12 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
 //        out_far_frames += 80;
 
         // AudioProcessing: Process Audio
-	audioframe_setdata(frame, &framebuf_far_mono, frames_per_block_far);
-        audioproc_process(apm, frame);
-	audioframe_getdata(frame, &framebuf_far_mono, frames_per_block_far);
+        audioframe_setdata(frame, framebuf_far_mono, frames_per_block_far);
+        audioproc_aec_set_delay(apm, 0);
+        webrtc_debug = audioproc_process(apm, frame);
+        audioframe_getdata(frame, framebuf_far_mono, frames_per_block_far);
+
+        if (webrtc_debug != 0) ALOGE("%s: WEBRTC ERROR: %d", __func__, webrtc_debug);
 
         memset(framebuf_far_stereo, 0, block_len_bytes_far_stereo);
         adjust_channels(framebuf_far_mono, 1, framebuf_far_stereo, 2, 2, block_len_bytes_far_mono);

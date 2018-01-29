@@ -13,12 +13,11 @@ struct audioproc *audioproc_create(){
 }
 
 struct audioframe *audioframe_create(int channels, int sample_rate, int samples_per_block){
-	webrtc::AudioFrame frame;
-	frame.num_channels_ = channels;
-	frame.sample_rate_hz_ = sample_rate;
-	frame.samples_per_channel_ = samples_per_block;
-
-	audioframe *a = F_TO_C(&frame);
+	webrtc::AudioFrame *frame = new webrtc::AudioFrame;
+	frame->num_channels_ = channels;
+	frame->sample_rate_hz_ = sample_rate;
+	frame->samples_per_channel_ = samples_per_block;
+	audioframe *a = F_TO_C(frame);
 	return a;
 }
 
