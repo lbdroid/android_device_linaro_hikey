@@ -1671,8 +1671,7 @@ static int adev_set_parameters(struct audio_hw_device *hw_dev, const char *kvpai
     ret = str_parms_get_str(parms, AUDIO_PARAMETER_HFP_SET_SAMPLING_RATE, value, sizeof(value));
     if (ret >= 0) {
         val = atoi(value);
-        //TODO adev->sco_samplerate = val;
-        adev->sco_samplerate = 8000;
+        adev->sco_samplerate = val;
     }
 
     ret = str_parms_get_str(parms, AUDIO_PARAMETER_HFP_ENABLE, value, sizeof(value));
