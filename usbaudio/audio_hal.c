@@ -1215,33 +1215,6 @@ void stereo_to_mono(int16_t *stereo, int16_t *mono, size_t samples){
         mono[i] = stereo[2*i];
 }
 
-// TEMP FOR DATA WRITE TO FILE
-/*
-#define ID_RIFF 0x46464952
-#define ID_WAVE 0x45564157
-#define ID_FMT  0x20746d66
-#define ID_DATA 0x61746164
-
-#define FORMAT_PCM 1
-
-struct wav_header {
-    uint32_t riff_id;
-    uint32_t riff_sz;
-    uint32_t riff_fmt;
-    uint32_t fmt_id;
-    uint32_t fmt_sz;
-    uint16_t audio_format;
-    uint16_t num_channels;
-    uint32_t sample_rate;
-    uint32_t byte_rate;
-    uint16_t block_align;
-    uint16_t bits_per_sample;
-    uint32_t data_id;
-    uint32_t data_sz;
-};
-*/
-// END TEMP FOR DATA WRITE TO FILE
-
 void* runsco(void * args) {
     int16_t *framebuf_far_stereo;
     int16_t *framebuf_far_mono;
@@ -1256,17 +1229,25 @@ void* runsco(void * args) {
     size_t frames_per_block_near = 0;
     size_t frames_per_block_far = 0;
 
-    int rc;
+    int rc, webrtc_debug;
     struct audio_device * adev = (struct audio_device *)args;
     struct resampler_itfe *resampler_to48;
     struct resampler_itfe *resampler_from48;
 
-    int loopcounter = 0;
+    int loopcounter = 0, i;
     struct timespec hwtime;
     unsigned int f_read_avail;
     unsigned int f_read_bytes;
     unsigned int f_write_avail;
     unsigned int f_write_bytes;
+
+    int16_t lastsample_le = 0;
+    int16_t lastsample_be = 0;
+    int16_t tempsample_be = 0;
+    uint32_t sumofdiff_be = 0;
+    uint32_t sumofdiff_le = 0;
+
+    bool swapendian = false;
 
     // AudioProcessing: Initialize
     struct audioproc *apm = audioproc_create();
@@ -1294,43 +1275,6 @@ void* runsco(void * args) {
         .stop_threshold = 0,
     };
 
-// TEMP FOR FILE WRITE
-/*struct wav_header header;
-
-unsigned int in_far_frames = 0;
-unsigned int in_near_frames = 0;
-unsigned int out_near_frames = 0;
-unsigned int out_far_frames = 0;
-
-ALOGD("%s: Opening PCM logs", __func__);
-
-FILE *in_far = fopen("/data/pcmlogs/in_far.wav", "wb");
-FILE *in_near = fopen("/data/pcmlogs/in_near.wav", "wb");
-FILE *out_near = fopen("/data/pcmlogs/out_near.wav", "wb");
-FILE *out_far = fopen("/data/pcmlogs/out_far.wav", "wb");
-
-ALOGD("%s: Setting up header", __func__);
-
-header.riff_id = ID_RIFF;
-header.riff_sz = 0;
-header.riff_fmt = ID_WAVE;
-header.fmt_id = ID_FMT;
-header.fmt_sz = 16;
-header.audio_format = FORMAT_PCM;
-header.num_channels = 1;
-header.bits_per_sample = pcm_format_to_bits(PCM_FORMAT_S16_LE);
-header.block_align = header.bits_per_sample / 8;
-header.data_id = ID_DATA;
-
-ALOGD("%s: Seeking in PCM logs", __func__);
-
-fseek(in_far, sizeof(struct wav_header), SEEK_SET);
-fseek(in_near, sizeof(struct wav_header), SEEK_SET);
-fseek(out_near, sizeof(struct wav_header), SEEK_SET);
-fseek(out_far, sizeof(struct wav_header), SEEK_SET);
-*/
-// END TEMP FOR FILE WRITE
-
     ALOGD("%s: USBCARD: %d, BTCARD: %d", __func__, adev->usbcard, adev->btcard);
 
     // Put all existing streams into standby (closed). Note that when sco thread is running
@@ -1338,21 +1282,53 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
     // not opening the pcm's.
     struct listnode* node;
 
-    list_for_each(node, &adev->output_stream_list) {
-        struct audio_stream* stream = (struct audio_stream *)node_to_item(node, struct stream_out, list_node);
-        out_standby((struct audio_stream_out *)stream);
+    i = 0;
+    do {
+        list_for_each(node, &adev->output_stream_list) {
+            struct audio_stream* stream = (struct audio_stream *)node_to_item(node, struct stream_out, list_node);
+            out_standby((struct audio_stream_out *)stream);
+        }
+
+        adev->sco_pcm_near_out = pcm_open(adev->usbcard, 0, PCM_OUT, &usb_config);
+        i++;
+    } while (i < 10 && (adev->sco_pcm_near_out == 0 || !pcm_is_ready(adev->sco_pcm_near_out)));
+
+    if (adev->sco_pcm_near_out == 0) return NULL;
+    if (!pcm_is_ready(adev->sco_pcm_near_out)){
+        pcm_close(adev->sco_pcm_near_out);
+        return NULL;
     }
 
-    list_for_each(node, &adev->input_stream_list) {
-        struct audio_stream* stream = (struct audio_stream *)node_to_item(node, struct stream_in, list_node);
-        in_standby((struct audio_stream_in *)stream);
+    i = 0;
+    do {
+        list_for_each(node, &adev->input_stream_list) {
+            struct audio_stream* stream = (struct audio_stream *)node_to_item(node, struct stream_in, list_node);
+            in_standby((struct audio_stream_in *)stream);
+        }
+
+        adev->sco_pcm_near_in = pcm_open(adev->usbcard, 0, PCM_IN, &usb_config);
+        i++;
+    } while (i < 10 && (adev->sco_pcm_near_in == 0 || !pcm_is_ready(adev->sco_pcm_near_in)));
+
+    if (adev->sco_pcm_near_in == 0){
+        pcm_close(adev->sco_pcm_near_out);
+        return NULL;
+    }
+    if (!pcm_is_ready(adev->sco_pcm_near_in)){
+        pcm_close(adev->sco_pcm_near_out);
+        pcm_close(adev->sco_pcm_near_in);
+        return NULL;
     }
 
     adev->sco_pcm_far_in = pcm_open(adev->btcard, 0, PCM_IN, &bt_config);
     if (adev->sco_pcm_far_in == 0) {
         ALOGD("%s: failed to allocate memory for PCM far/in", __func__);
+        pcm_close(adev->sco_pcm_near_out);
+        pcm_close(adev->sco_pcm_near_in);
         return NULL;
     } else if (!pcm_is_ready(adev->sco_pcm_far_in)){
+        pcm_close(adev->sco_pcm_near_out);
+        pcm_close(adev->sco_pcm_near_in);
         pcm_close(adev->sco_pcm_far_in);
         ALOGD("%s: failed to open PCM far/in", __func__);
         return NULL;
@@ -1361,42 +1337,16 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
     adev->sco_pcm_far_out = pcm_open(adev->btcard, 0, PCM_OUT, &bt_config);
     if (adev->sco_pcm_far_out == 0) {
         ALOGD("%s: failed to allocate memory for PCM far/out", __func__);
+        pcm_close(adev->sco_pcm_near_out);
+        pcm_close(adev->sco_pcm_near_in);
         pcm_close(adev->sco_pcm_far_in);
         return NULL;
     } else if (!pcm_is_ready(adev->sco_pcm_far_out)){
+        pcm_close(adev->sco_pcm_near_out);
+        pcm_close(adev->sco_pcm_near_in);
         pcm_close(adev->sco_pcm_far_in);
         pcm_close(adev->sco_pcm_far_out);
         ALOGD("%s: failed to open PCM far/out", __func__);
-        return NULL;
-    }
-
-    adev->sco_pcm_near_in = pcm_open(adev->usbcard, 0, PCM_IN, &usb_config);
-    if (adev->sco_pcm_near_in == 0) {
-        ALOGD("%s: failed to allocate memory for PCM near/in", __func__);
-        pcm_close(adev->sco_pcm_far_in);
-        pcm_close(adev->sco_pcm_far_out);
-        return NULL;
-    } else if (!pcm_is_ready(adev->sco_pcm_near_in)){
-        pcm_close(adev->sco_pcm_far_in);
-        pcm_close(adev->sco_pcm_far_out);
-        pcm_close(adev->sco_pcm_near_in);
-        ALOGD("%s: failed to open PCM near/in", __func__);
-        return NULL;
-    }
-
-    adev->sco_pcm_near_out = pcm_open(adev->usbcard, 0, PCM_OUT, &usb_config);
-    if (adev->sco_pcm_near_out == 0) {
-        ALOGD("%s: failed to allocate memory for PCM near/out", __func__);
-        pcm_close(adev->sco_pcm_far_in);
-        pcm_close(adev->sco_pcm_far_out);
-        pcm_close(adev->sco_pcm_near_in);
-        return NULL;
-    } else if (!pcm_is_ready(adev->sco_pcm_near_out)){
-        pcm_close(adev->sco_pcm_far_in);
-        pcm_close(adev->sco_pcm_far_out);
-        pcm_close(adev->sco_pcm_near_in);
-        pcm_close(adev->sco_pcm_near_out);
-        ALOGD("%s: failed to open PCM near/out", __func__);
         return NULL;
     }
 
@@ -1462,15 +1412,35 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
     memset(framebuf_far_stereo, 0, block_len_bytes_far_stereo);
     while (!adev->terminate_sco && pcm_read(adev->sco_pcm_far_in, framebuf_far_stereo, block_len_bytes_far_stereo) == 0){
 
-//        ALOGD("%s: Looping... #%d", __func__, loopcounter);
-        loopcounter++;
-
         memset(framebuf_far_mono, 0, block_len_bytes_far_mono);
         stereo_to_mono(framebuf_far_stereo, framebuf_far_mono, frames_per_block_far);
 
-        // TEMP FILE WRITE
-//        fwrite(framebuf_far_mono, 1, block_len_bytes_far_mono, in_far);
-//        in_far_frames += 80;
+        if (loopcounter < 1000){ // Reversed endianness detection
+            for (i=0; i<frames_per_block_far; i++){
+                tempsample_be = (int16_t)(((uint16_t)framebuf_far_mono[i])>>8 | ((uint16_t)framebuf_far_mono[i])<<8);
+                if (loopcounter == 0 && i == 0){
+                    lastsample_le = framebuf_far_mono[i];
+                    lastsample_be = tempsample_be;
+                }
+                sumofdiff_le += abs(lastsample_le - framebuf_far_mono[i]);
+                sumofdiff_be += abs(lastsample_be - tempsample_be);
+            }
+            if (!swapendian && sumofdiff_le > sumofdiff_be){
+                swapendian = true;
+                ALOGD("%s: WRONG ENDIANNESS IN SCO INPUT, correcting", __func__);
+            } else if (swapendian && sumofdiff_le <= sumofdiff_be){
+                swapendian = false; // swap back in case the first few samples were just acting weird.
+                ALOGD("%s: Possible misdetection in endianness calculation, reverting", __func__);
+            }
+            loopcounter++;
+        }
+
+        if (swapendian){
+            for (i=0; i<frames_per_block_far; i++){
+                tempsample_be = (int16_t)(((uint16_t)framebuf_far_mono[i])>>8 | ((uint16_t)framebuf_far_mono[i])<<8);
+                framebuf_far_mono[i] = tempsample_be;
+            }
+        }
 
         // AudioProcessing: Analyze reverse stream
         audioframe_setdata(frame, framebuf_far_mono, frames_per_block_far);
@@ -1478,10 +1448,6 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
 
         memset(framebuf_near_mono, 0, block_len_bytes_near_mono);
         resampler_to48->resample_from_input(resampler_to48, (int16_t *)framebuf_far_mono, (size_t *)&frames_per_block_far, (int16_t *) framebuf_near_mono, (size_t *)&frames_per_block_near);
-
-        // TEMP FILE WRITE
-//        fwrite(framebuf_near_mono, 1, block_len_bytes_near_mono, in_near);
-//        in_near_frames += 480;
 
         memset(framebuf_near_stereo, 0, block_len_bytes_near_stereo);
         adjust_channels(framebuf_near_mono, 1, framebuf_near_stereo, 2, 2, block_len_bytes_near_mono);
@@ -1499,21 +1465,13 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
 
         pcm_read(adev->sco_pcm_near_in, framebuf_near_stereo, f_read_bytes);
 
-        ALOGD("%s: near out avail: %d, out written: %d, near in avail: %d, near read: %d. (%d)", __func__, f_write_avail, f_write_bytes/4, f_read_avail, f_read_bytes/4, loopcounter);
+        //ALOGD("%s: near out avail: %d, out written: %d, near in avail: %d, near read: %d. (%d)", __func__, f_write_avail, f_write_bytes/4, f_read_avail, f_read_bytes/4, loopcounter);
 
         memset(framebuf_near_mono, 0, block_len_bytes_near_mono);
         stereo_to_mono(framebuf_near_stereo, framebuf_near_mono, frames_per_block_near);
 
-        // TEMP FILE WRITE
-//        fwrite(framebuf_near_mono, 1, block_len_bytes_near_mono, out_near);
-//        out_near_frames += 480;
-
         memset(framebuf_far_mono, 0, block_len_bytes_far_mono);
         resampler_from48->resample_from_input(resampler_from48, (int16_t *)framebuf_near_mono, (size_t *)&frames_per_block_near, (int16_t *)framebuf_far_mono, (size_t *)&frames_per_block_far);
-
-        // TEMP FILE WRITE
-//        fwrite(framebuf_far_mono, 1, block_len_bytes_far_mono, out_far);
-//        out_far_frames += 80;
 
         // AudioProcessing: Process Audio
         audioframe_setdata(frame, framebuf_far_mono, frames_per_block_far);
@@ -1535,46 +1493,6 @@ fseek(out_far, sizeof(struct wav_header), SEEK_SET);
 
     // AudioProcessing: Done
     audioproc_destroy(apm);
-
-// TEMP FOR FILE WRITE
-/*
-// in_far
-header.sample_rate = 8000;
-header.byte_rate = (header.bits_per_sample / 8) * 1 * 8000;
-header.data_sz = in_far_frames * header.block_align;
-header.riff_sz = header.data_sz + sizeof(header) - 8;
-fseek(in_far, 0, SEEK_SET);
-fwrite(&header, sizeof(struct wav_header), 1, in_far);
-fclose(in_far);
-
-// in_near
-header.sample_rate = 48000;
-header.byte_rate = (header.bits_per_sample / 8) * 1 * 48000;
-header.data_sz = in_near_frames * header.block_align;
-header.riff_sz = header.data_sz + sizeof(header) - 8;
-fseek(in_near, 0, SEEK_SET);
-fwrite(&header, sizeof(struct wav_header), 1, in_near);
-fclose(in_near);
-
-// out_near
-header.sample_rate = 48000;
-header.byte_rate = (header.bits_per_sample / 8) * 1 * 48000;
-header.data_sz = out_near_frames * header.block_align;
-header.riff_sz = header.data_sz + sizeof(header) - 8;
-fseek(out_near, 0, SEEK_SET);
-fwrite(&header, sizeof(struct wav_header), 1, out_near);
-fclose(out_near);
-
-// out_far
-header.sample_rate = 8000;
-header.byte_rate = (header.bits_per_sample / 8) * 1 * 8000;
-header.data_sz = out_far_frames * header.block_align;
-header.riff_sz = header.data_sz + sizeof(header) - 8;
-fseek(out_far, 0, SEEK_SET);
-fwrite(&header, sizeof(struct wav_header), 1, out_far);
-fclose(out_far);
-*/
-// END TEMP FOR FILE WRITE
 
     // We're done, close the PCM's and return.
     pcm_close(adev->sco_pcm_near_in);
