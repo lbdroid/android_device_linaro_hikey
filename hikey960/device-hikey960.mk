@@ -37,6 +37,12 @@ PRODUCT_PACKAGES += audio.primary.hikey960
 # Build HiKey960 USB audio HAL
 PRODUCT_PACKAGES += audio.usb.hikey960
 
+# Build generic USB GPS HAL
+PRODUCT_PACKAGES += gps.hikey960 \
+	android.hardware.gnss@1.0 \
+	android.hardware.gnss@1.0-impl \
+	android.hardware.gnss@1.0-service
+
 PRODUCT_PACKAGES += gralloc.hikey960
 
 PRODUCT_PACKAGES += power.hikey960
