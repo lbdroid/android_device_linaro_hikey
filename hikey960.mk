@@ -16,8 +16,8 @@ $(call inherit-product, device/linaro/hikey/hikey960/device-hikey960.mk)
 $(call inherit-product, device/linaro/hikey/device-common.mk)
 $(call inherit-product, $(SRC_TARGET_DIR)/product/full_base.mk)
 
-$(call inherit-product, packages/services/Car/car_product/build/car.mk)
-PRODUCT_PACKAGE_OVERLAYS := packages/services/Car/car_product/overlay
+$(call inherit-product, device/linaro/hikey/car.mk)
+PRODUCT_PACKAGE_OVERLAYS := device/linaro/hikey/overlay_car
 
 PRODUCT_PACKAGES += vehicle.default \
 	CarSettings \
