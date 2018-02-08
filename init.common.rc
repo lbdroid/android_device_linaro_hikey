@@ -92,6 +92,12 @@ service uim /vendor/bin/uim
     group bluetooth net_bt_admin system
     oneshot
 
+service swid /system/bin/swid
+    class main
+    user bluetooth
+    group system
+    oneshot
+
 service wpa_supplicant /system/vendor/bin/hw/wpa_supplicant \
      -iwlan0 -Dnl80211 -c/data/misc/wifi/wpa_supplicant.conf \
      -g@android:wpa_wlan0
