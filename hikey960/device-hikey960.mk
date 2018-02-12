@@ -30,7 +30,6 @@ PRODUCT_COPY_FILES +=	$(LOCAL_PATH)/fstab.hikey960:root/fstab.hikey960 \
 PRODUCT_COPY_FILES += \
 	device/linaro/hikey/hifi/firmware/hifi-hikey960.img:system/etc/firmware/hifi/hifi.img
 
-
 # Build HiKey960 HDMI audio HAL. Experimental only may not work. FIXME
 PRODUCT_PACKAGES += audio.primary.hikey960
 
@@ -47,7 +46,9 @@ PRODUCT_PACKAGES += gralloc.hikey960
 
 PRODUCT_PACKAGES += power.hikey960
 
-PRODUCT_PACKAGES += swid
+PRODUCT_PACKAGES += \
+		swid \
+		SWIConfig
 
 # Include vendor binaries
 $(call inherit-product-if-exists, vendor/linaro/hikey960/device-vendor.mk)

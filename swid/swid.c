@@ -200,7 +200,8 @@ int main(){
 
 	key_fd = create_socket("/dev/swi");
 
-	system ("/system/bin/chmod 777 /dev/swi"); // TODO: system:system 644
+	system ("/system/bin/chmod 644 /dev/swi");
+	system ("/system/bin/chown system.system /dev/swi");
 
 	if (pthread_create(&key_reader, NULL, key_read, NULL) != 0) return -1;
 	pthread_detach(key_reader);

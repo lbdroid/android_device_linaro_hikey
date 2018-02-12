@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    tools:context="tk.rabidbeaver.swi96.ConfigureSWI">
+
+    <Button
+        android:layout_width="300dp"
+        android:layout_height="70dp"
+        android:text="START PROGRAMMING"
+        android:id="@+id/startbtn" />
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="30dp"/>
+
+    <Button
+        android:layout_width="300dp"
+        android:layout_height="70dp"
+        android:text="END PROGRAMMING"
+        android:id="@+id/endbtn" />
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="30dp"/>
+
+    <Button
+        android:layout_width="300dp"
+        android:layout_height="70dp"
+        android:text="RECONNECT"
+        android:id="@+id/reconnect" />
+
+    <Space
+        android:layout_width="match_parent"
+        android:layout_height="30dp"/>
+
+    <EditText
+        android:layout_width="300dp"
+        android:layout_height="70dp"
+        android:text="03"
+        android:id="@+id/input"/>
+
+    <Button
+        android:layout_width="300dp"
+        android:layout_height="70dp"
+        android:text="Program button"
+        android:id="@+id/savebtn"/>
+</LinearLayout>
