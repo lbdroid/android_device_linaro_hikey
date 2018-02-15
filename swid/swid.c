@@ -185,7 +185,7 @@ int main(){
 
 	pthread_t key_reader;
 
-	daemon(0,0);
+	//daemon(0,0);
 
 	serial_fd = open (serialportname, O_RDWR | O_NOCTTY | O_SYNC);
 	if (serial_fd < 0){

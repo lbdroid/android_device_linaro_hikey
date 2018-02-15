@@ -94,8 +94,8 @@ service uim /vendor/bin/uim
 
 service swid /system/bin/swid
     class main
-    user bluetooth
-    group system
+    user system
+    group bluetooth
     oneshot
 
 service wpa_supplicant /system/vendor/bin/hw/wpa_supplicant \

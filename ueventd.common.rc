@@ -4,6 +4,7 @@ subsystem usbmisc
 /dev/hci_tty     0666 root root
 /dev/ttyAMA1     0660 bluetooth bluetooth
 /dev/ttyAMA4     0660 bluetooth bluetooth
+/dev/ttyAMA3     0660 system bluetooth
 /dev/mali        0666 system graphics
 /dev/mali0       0666 system graphics
 /dev/nanohub              0660   system     system

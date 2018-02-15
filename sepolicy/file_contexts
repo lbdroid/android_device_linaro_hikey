@@ -15,6 +15,8 @@
 # files in /vendor
 /(vendor|system/vendor)/bin/uim  u:object_r:hci_attach_exec:s0
 /(vendor|system/vendor)/bin/hw/android\.hardware\.bluetooth@1\.0-service\.hikey      u:object_r:hal_bluetooth_hikey_exec:s0
+/(vendor|system/vendor)/bin/hw/android\.hardware\.broadcastradio@\d+\.\d+-service\.dmhd1000 u:object_r:hal_broadcastradio_dmhd1000_exec:s0
+/(vendor|system/vendor|system)/bin/swid  u:object_r:swid_exec:s0
 /(vendor|system/vendor)/bin/nanoapp_cmd  u:object_r:nanoapp_cmd_exec:s0
 
 # /data

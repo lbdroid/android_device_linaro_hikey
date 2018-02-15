@@ -1,0 +1,4 @@
+type swid, domain;
+type swid_exec, exec_type, vendor_file_type, file_type;
+
+init_daemon_domain(swid)
