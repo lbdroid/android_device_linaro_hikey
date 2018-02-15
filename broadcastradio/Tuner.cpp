@@ -57,9 +57,12 @@ Tuner::Tuner(V1_0::Class classId, const sp<V1_0::ITunerCallback>& callback)
       mCallback1_1(ITunerCallback::castFrom(callback).withDefault(nullptr)),
       mIsAnalogForced(false) {
 	dmhd1000.activate();
-	dmhd1000.command("volume 50");
-	dmhd1000.command("tune 931 FM"); // TODO look up last channel
-	dmhd1000.command("dtr 1");
+	sleep(1);
+	dmhd1000.setDTR(true);
+	sleep(1);
+	dmhd1000.hd_setvolume(50);
+	sleep(1);
+	dmhd1000.passCB(mCurrentProgram, mCurrentProgramInfo, mCallback1_1);
 	mIsClosed = false;
 }
 
@@ -90,12 +93,11 @@ Return<Result> Tuner::setConfiguration(const BandConfig& config) {
         mCurrentProgram = utils::make_selector(mAmfmConfig.type, mAmfmConfig.lowerLimit);
 
         if (utils::isFm(mAmfmConfig.type)) {
-            dmhd1000.command("tune", 931, "FM");
-            // TODO: new command to just set band and tune to "last" channel used.
+            dmhd1000.tune(931, 0, dmhd1000.BAND_FM);
         } else {
-            dmhd1000.command("tune", 1010, "AM");
-            // TODO: new command to just set band and tune to "last" channel used.
+            dmhd1000.tune(1010, 0, dmhd1000.BAND_AM);
         }
+	dmhd1000.request_hdsignalstrenth();
 
         mIsAmfmConfigSet = true;
         mCallback->configChange(Result::OK, mAmfmConfig);
@@ -123,8 +125,12 @@ static ProgramInfo makeDummyProgramInfo(const ProgramSelector& selector) {
     auto& info10 = info11.base;
 
     utils::getLegacyChannel(selector, &info10.channel, &info10.subChannel);
+    info10.tuned = 1;
+    info10.stereo = 1;
+    info10.digital = 0;
+    info10.signalStrength = 50;
     info11.selector = selector;
-    info11.flags |= ProgramInfoFlags::MUTED;
+    info11.flags |= ProgramInfoFlags::LIVE;
 
     return info11;
 }
@@ -139,18 +145,25 @@ HalRevision Tuner::getHalRev() const {
 
 void Tuner::tuneInternalLocked(const ProgramSelector& sel) {
 
+    ALOGD("Tuning type: %d, value: %lu", sel.programType, sel.primaryId.value);
+
     if (sel.programType == static_cast<uint32_t>(ProgramType::AM)){
-        dmhd1000.command("tune", sel.primaryId.value, "AM");
+	ALOGD("Tuning AM, sending command to dmhd...");
+        dmhd1000.tune(sel.primaryId.value, 0, dmhd1000.BAND_AM);
     } else if (sel.programType == static_cast<uint32_t>(ProgramType::FM)){
-        dmhd1000.command("tune", sel.primaryId.value, "FM");
+	ALOGD("Tuning FM, sending command to dmhd...");
+        dmhd1000.tune(sel.primaryId.value/100, 0, dmhd1000.BAND_FM);
     }
+    dmhd1000.request_hdsignalstrenth();
     mIsTuneCompleted = true;
+
+    mCurrentProgramInfo = makeDummyProgramInfo(sel);
 
     if (mCallback1_1 == nullptr) {
         mCallback->tuneComplete(Result::OK, mCurrentProgramInfo.base);
     } else {
         mCallback1_1->tuneComplete_1_1(Result::OK, mCurrentProgramInfo.selector);
-        mCallback1_1->currentProgramInfoChanged(mCurrentProgramInfo);
+        mCallback1_1->currentProgramInfoChanged(mCurrentProgramInfo); // TODO: this is the one where the channel data comes from.
     }
 }
 
@@ -166,9 +179,9 @@ Return<Result> Tuner::scan(Direction direction, bool skipSubChannel __unused) {
 
         lock_guard<mutex> lk(mMut);
         if (direction == Direction::UP){
-            dmhd1000.command("seekup");
+            dmhd1000.hd_seekup();
         } else {
-            dmhd1000.command("seekdown");
+            dmhd1000.hd_seekdown();
         }
     };
     mThread.schedule(task, gDefaultDelay.scan);
@@ -241,16 +254,21 @@ Return<Result> Tuner::tuneByProgramSelector(const ProgramSelector& sel) {
         }
 
         auto freq = utils::getId(sel, IdentifierType::AMFM_FREQUENCY);
-        if (freq < mAmfmConfig.lowerLimit || freq > mAmfmConfig.upperLimit) {
+        if (freq < mAmfmConfig.lowerLimit){// || freq > mAmfmConfig.upperLimit) {
+	    ALOGD("freq: %lu, lowerLimit: %d, upperLimit: %d", freq, mAmfmConfig.lowerLimit, mAmfmConfig.upperLimit);
             return Result::INVALID_ARGUMENTS;
         }
     } else if (programType == ProgramType::DAB) {
+	    ALOGD("Attempting to tune DAB, invalid");
         if (!utils::hasId(sel, IdentifierType::DAB_SIDECC)) return Result::INVALID_ARGUMENTS;
     } else if (programType == ProgramType::DRMO) {
+	    ALOGD("Attempting to tune DRMO, invalid");
         if (!utils::hasId(sel, IdentifierType::DRMO_SERVICE_ID)) return Result::INVALID_ARGUMENTS;
     } else if (programType == ProgramType::SXM) {
+	    ALOGD("Attempting to tune SXM, invalid");
         if (!utils::hasId(sel, IdentifierType::SXM_SERVICE_ID)) return Result::INVALID_ARGUMENTS;
     } else {
+	    ALOGD("Attempting to tune <<unknown>>, invalid");
         return Result::INVALID_ARGUMENTS;
     }
 

@@ -8,6 +8,7 @@
 #include <jni.h>
 #include "hddefs.h"
 #include "hdlinuxio.h"
+#include <android/hardware/broadcastradio/1.1/ITunerCallback.h>
 
 using namespace std;
 
@@ -31,6 +32,13 @@ class HDListen {
 		 LinuxPort* ioport;
 //		 JavaVM * s_Jvm;
 //		 jclass j_cls;
+		android::hardware::broadcastradio::V1_1::ProgramSelector ps;
+		android::hardware::broadcastradio::V1_1::ProgramInfo pi;
+		android::sp<android::hardware::broadcastradio::V1_1::ITunerCallback> cb;
+
+		string rds_ps;
+		string rds_rt;
+		string rds_genre;
 
 	public:
 		HDListen();
@@ -38,6 +46,11 @@ class HDListen {
 		void setdefs(HDVals*);
 		void setioport(LinuxPort*);
 //		void passJvm(JavaVM *, jclass);
+		void passCB(
+			android::hardware::broadcastradio::V1_1::ProgramSelector,
+			android::hardware::broadcastradio::V1_1::ProgramInfo,
+			android::sp<android::hardware::broadcastradio::V1_1::ITunerCallback>&
+		);
 		void listenthread();
 		void listentoradio();
 		string gethdvalue(string);

@@ -71,10 +71,10 @@ static const map<Class, ModuleConfig> gModuleConfigs{
         },
     })},
 
-    {Class::SAT, ModuleConfig({
+    /*{Class::SAT, ModuleConfig({
         "Satellite radio mock",
         {},  // amFmBands
-    })},
+    })},*/
 };
 // clang-format on
 

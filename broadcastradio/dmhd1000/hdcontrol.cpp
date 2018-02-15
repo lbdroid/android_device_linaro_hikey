@@ -62,9 +62,9 @@ HDControl::HDControl() {//public
 	mainconfigfile="/etc/HDRadio.cfg";
 	defaultserial = "/dev/ttyUSB0";
 	defstreamwait = 1;
-	deffreq = "895";
+	deffreq = "931";
 	defband = "fm";
-	defvol = "100";
+	defvol = "50";
 	defbass = "50";
 	deftreb = "50";
 
@@ -100,13 +100,13 @@ void HDControl::setSerialPort(string serialDevice) {//public
  * the device is processed.
  */
 void HDControl::activate() {//public
-LOGD("RUNNING ACTIVATE");
+LOGD("RUNNING activate()");
 	hdCommand.setstreamwait(defstreamwait);
 	ioPort.setserialport(defaultserial);
 	ioPort.openport();
 	ioPort.hanguponexit(false);
 	hdListen.listentoradio();
-	command_line("requestpower");
+	//command_line("requestpower");
 /*	if (true) {
 		request_power();
 		request_mute();
@@ -125,12 +125,20 @@ void HDControl::passJvm(JavaVM * jvm, jclass jcls){
 	hdListen.passJvm(jvm, jcls);
 }
 */
+void HDControl::passCB(
+		android::hardware::broadcastradio::V1_1::ProgramSelector ps,
+		android::hardware::broadcastradio::V1_1::ProgramInfo pi,
+		android::sp<android::hardware::broadcastradio::V1_1::ITunerCallback> cb
+	){
+	hdListen.passCB(ps, pi, cb);
+}
+
 
 /**
  * Close the port to the radio.
  */
 void HDControl::close() {//public
-LOGD("RUNNING DEACTIVATE");
+LOGD("RUNNING close()");
 	hdListen.stopreading();
 	ioPort.closeport();
 	return;
@@ -186,6 +194,8 @@ bool HDControl::command_line(string commandLine) {//public
 	int i, lasti, argcount = -1;
 	string cmd, arg;
 
+LOGD("RUNNING command_line(%s)", commandLine.c_str());
+
 // 	cout << "        Command Line: ->" << CommandLine << "<-, Size: " << CommandLine.size() << "\n";
 	if (commandLine == "")
 		return true;
@@ -221,12 +231,15 @@ bool HDControl::command_line(string commandLine) {//public
 	iscommand = false;
 	switch (argcount) {
 		case 0:
+			LOGD("Running command(%s)", cmd.c_str());
 			iscommand = command(cmd);
 			break;
 		case 1:
+			LOGD("Running command(%s, %s)", cmd.c_str(), cmdargs[0].c_str());
 			iscommand = command(cmd, cmdargs[0]);
 			break;
 		case 2:
+			LOGD("Running command(%s, %s, %s)", cmd.c_str(), cmdargs[0].c_str(), cmdargs[1].c_str());
 			iscommand = command(cmd, cmdargs[0], cmdargs[1]);
 			break;
 	}
@@ -477,6 +490,10 @@ bool HDControl::command(string cmd, int arg1, string arg2) {//public
 	string sarg = intToString(arg1);
 	iscommand = command(cmd, sarg, arg2);
 	return iscommand;
+}
+
+bool HDControl::tune(int freq, int channel, int band){
+	return hdCommand.hd_tune(freq, channel, band);
 }
 
 /**
@@ -888,6 +905,10 @@ void HDControl::showdtr() {//public
 	dtrstate = ioPort.getdtr();
 	cout << "DTR State: " << dtrstate << endl;
 	return;
+}
+
+void HDControl::setDTR(bool on){
+	ioPort.toggledtr(on);
 }
 
 /**

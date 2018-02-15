@@ -28,9 +28,12 @@ int main(int /* argc */, char** /* argv */) {
     configureRpcThreadpool(4, true);
 
     BroadcastRadioFactory broadcastRadioFactory;
+    ALOGD("Registering BroadcastRadioFactory as a service");
     auto status = broadcastRadioFactory.registerAsService();
     CHECK_EQ(status, android::OK) << "Failed to register Broadcast Radio HAL implementation";
 
+    if (status != android::OK) ALOGE("Unable to register broadcastradio service (%d)", status);
+    ALOGD("Joining RPC Thread pool");
     joinRpcThreadpool();
     return 1;  // joinRpcThreadpool shouldn't exit
 }

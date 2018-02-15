@@ -26,9 +26,16 @@ class HDControl {
 
 	public:
 		HDControl();
+		static const int BAND_AM = 1;
+		static const int BAND_FM = 2;
 		void setArguments(int, char**);
 		void setSerialPort(string);
 		void activate();
+		void passCB(
+			android::hardware::broadcastradio::V1_1::ProgramSelector,
+			android::hardware::broadcastradio::V1_1::ProgramInfo,
+			android::sp<android::hardware::broadcastradio::V1_1::ITunerCallback>
+		);
 //		void passJvm(JavaVM *, jclass);
 		void close();
 		void setVerbose(bool);
@@ -39,6 +46,7 @@ class HDControl {
 		bool command(string, int);
 		bool command(string, string, string);
 		bool command(string, int, string);
+		bool tune(int, int, int);
 		void radioOn();
 		void radioOff();
 		void muteOn();
@@ -83,6 +91,7 @@ class HDControl {
 		void request_rdstext();
 		void request_rdsgenre();
 		void showdtr();
+		void setDTR(bool);
 		void toggledtr(string);
 		void hanguponexit(bool);
 		string getValue(string);

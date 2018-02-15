@@ -382,26 +382,109 @@ void HDListen::passJvm(JavaVM * jvm, jclass jcls){
 	j_cls = jcls;
 }
 */
+void HDListen::passCB(
+		android::hardware::broadcastradio::V1_1::ProgramSelector in_ps,
+		android::hardware::broadcastradio::V1_1::ProgramInfo in_pi,
+		android::sp<android::hardware::broadcastradio::V1_1::ITunerCallback>& in_cb
+	){
+	ps = in_ps;
+	pi = in_pi;
+	cb = in_cb;
+}
 
 void HDListen::callback(string name, string val){
-/* TODO This needs to be redone
-	JNIEnv * env;
-//	LOGD("CALLBACK RUNNING");
 
-	if (s_Jvm != NULL){
-		s_Jvm->GetEnv((void**)&env, JNI_VERSION_1_6);
+/*
+ * I've seen these;
+ *
+ * volume (0-100)
+ * power (true / false)
+ * tune (freq BAND)
+ * signalstrength (bignumber like 1536)
+ * rdsenable (true / false)
+ * rdsprogramservice (text) :: key RDS_PS
+ * rdsgenre (text) :: key GENRE
+ * rdsradiotext (text) :: key RDS_RT
+ * seek (freq BAND)
+ * tune (freq BAND)
+ */
+
+	LOGD("CALLBACK: %s / %s", name.c_str(), val.c_str());
+	bool fm = false;
+	bool rds = false;
+	if (cb != nullptr){
+		if (strcmp(name.c_str(), "seek") == 0){
+			fm = (strstr(val.c_str(), "FM") != NULL);
+			pi.base.channel = (int)(atof(val.c_str()) * (fm?1000:1));
+			ps.primaryId.type = 1;
+			ps.primaryId.value = (int)(atof(val.c_str()) * (fm?1000:1));
+			pi.selector = ps;
+			pi.base.tuned = 0;
+			pi.base.stereo = 1;
+			pi.base.digital = 0;
+			pi.base.signalStrength = 50;
+			cb->currentProgramInfoChanged(pi);
+		} else if (strcmp(name.c_str(), "tune") == 0){
+			rds_ps = "";
+			rds_rt = "";
+			rds_genre = "";
+			fm = (strstr(val.c_str(), "FM") != NULL);
+			pi.base.channel = (int)(atof(val.c_str()) * (fm?1000:1));
+			ps.primaryId.type = 1;
+			ps.primaryId.value = (int)(atof(val.c_str()) * (fm?1000:1));
+			pi.selector = ps;
+			pi.base.tuned = 1;
+			pi.base.stereo = 1;
+			pi.base.digital = 0;
+			pi.base.signalStrength = 50;
+			cb->tuneComplete_1_1(android::hardware::broadcastradio::V1_0::Result::OK, pi.selector);
+			rds = true;
+		} else if (strcmp(name.c_str(), "rdsprogramservice") == 0){
+			rds_ps = val;
+			rds = true;
+		} else if (strcmp(name.c_str(), "rdsradiotext") == 0){
+			rds_rt = val;
+			rds = true;
+		} else if (strcmp(name.c_str(), "rdsgenre") == 0){
+			rds_genre = val;
+			rds = true;
+		} else if (strcmp(name.c_str(), "signalstrength") == 0){
+			pi.base.signalStrength = atoi(val.c_str());
+			if (pi.base.signalStrength < 400) pi.base.signalStrength = 0;
+			else if (pi.base.signalStrength > 2850) pi.base.signalStrength = 100;
+			else pi.base.signalStrength = (int)(((float) (pi.base.signalStrength - 400) / (float) 2450) * 100);
+			cb->currentProgramInfoChanged(pi);
+		}
+
+		if (rds) {
+			pi.base.metadata = android::hardware::hidl_vec<android::hardware::broadcastradio::V1_0::MetaData>(3);
+			pi.base.metadata[0] = {
+				android::hardware::broadcastradio::V1_0::MetadataType::TEXT,
+				android::hardware::broadcastradio::V1_0::MetadataKey::RDS_PS,
+				{},
+				{},
+				rds_ps,
+				{}
+			};
+			pi.base.metadata[1] = {
+				android::hardware::broadcastradio::V1_0::MetadataType::TEXT,
+				android::hardware::broadcastradio::V1_0::MetadataKey::TITLE,//RDS_RT,
+				{},
+				{},
+				rds_rt,
+				{}
+			};
+			pi.base.metadata[2] = {
+				android::hardware::broadcastradio::V1_0::MetadataType::TEXT,
+				android::hardware::broadcastradio::V1_0::MetadataKey::GENRE,
+				{},
+				{},
+				rds_genre,
+				{}
+			};
+			cb->currentProgramInfoChanged(pi);
+		}
 	}
-
-	s_Jvm->AttachCurrentThread(&env,NULL);
-	jmethodID j_mid = env->GetStaticMethodID(j_cls,"radioCallback", "(Ljava/lang/String;Ljava/lang/String;)V");
-	jstring jname = env->NewStringUTF(name.c_str());
-	jstring jval = env->NewStringUTF(val.c_str());
-	env->CallStaticVoidMethod(j_cls,j_mid,jname,jval);
-	env->DeleteLocalRef(jname);
-	env->DeleteLocalRef(jval);
-*/
-name="use this variable";
-val=4;
 }
 
 /**

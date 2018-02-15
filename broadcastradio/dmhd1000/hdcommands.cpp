@@ -357,6 +357,12 @@ bool HDCommands::hd_tune(string newfreq, string newchan, string newband) {//publ
 	return flag;
 }
 
+bool HDCommands::hd_tune(int freq, int channel, int band){
+	if (band == 1) return hd_tune(freq, channel, "am");
+	if (band == 2) return hd_tune(freq, channel, "fm");
+	return false;
+}
+
 /**
  * The main tune routine to tune the radio to a frequency, band, and subchannel.
  * @param newfreq the frequency to turn to

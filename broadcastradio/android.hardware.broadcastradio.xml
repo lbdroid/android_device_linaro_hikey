@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- These features determine that the device has a broadcast radio (AMFM). -->
+<permissions>
+    <feature name="android.hardware.broadcastradio" />
+</permissions>

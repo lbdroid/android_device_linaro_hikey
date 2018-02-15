@@ -39,6 +39,9 @@ PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.type.automotive.xml:system/etc/permissions/android.hardware.type.automotive.xml \
     frameworks/native/data/etc/android.hardware.screen.landscape.xml:system/etc/permissions/android.hardware.screen.landscape.xml
 
+PRODUCT_COPY_FILES += \
+    device/linaro/hikey/broadcastradio/android.hardware.broadcastradio.xml:system/etc/permissions/android.hardware.broadcastradio.xml
+
 #
 # Overrides
 PRODUCT_NAME := hikey960

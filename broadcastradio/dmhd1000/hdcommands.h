@@ -35,6 +35,7 @@ class HDCommands {
 		bool hd_tune(string, string);
 		bool hd_tune(int, string);
 		bool hd_tune(string, string, string);
+		bool hd_tune(int, int, int);
 		bool hd_tune(int, int, string);
 		void hd_tuneupdown(string);
 		void hd_seekupdown(string);
