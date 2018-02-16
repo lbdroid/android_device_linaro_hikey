@@ -166,8 +166,9 @@ string HDVals::getcode(string command) {//public
  * @return the reply name or command (they're the same) that matches the code
  */
 string HDVals::getcommand(string code) {//public
-	string val = hd_codes[code];
-	return val;
+	if (code.length() > 0 && hd_codes.find(code) != hd_codes.end())
+		return hd_codes[code];
+	return "";
 }
 
 /**
@@ -209,8 +210,9 @@ string HDVals::getconstant(string name) {//public
  * @return the type of data format
  */
 string HDVals::getformat(string command) {//public
-	string val = hd_format[command];
-	return val;
+	if (command.length() > 0 && hd_format.find(command) != hd_format.end())
+		return hd_format[command];
+	return "";
 }
 
 /**

@@ -303,13 +303,13 @@ string HDListen::decodemsg() {//protected
 	msgfmt = hdvals->getformat(msgname);
 	msgval = curmsg;
 	if (msgfmt == "boolean") {
-//LOGD("DECODEMSG: boolean");
+LOGD("DECODEMSG: boolean");
 		if (msgval == hdvals->getconstant("one"))
 			msgval = "true";
 		else
 			msgval = "false";
 	} else if (msgfmt == "int") {
-//LOGD("DECODEMSG: int");
+LOGD("DECODEMSG: int");
 		ival = hexbytestoint(msgval);
 		if (hdvals->getscaled(msgname)) {
 			ival = (ival * 100)/90;
@@ -317,13 +317,15 @@ string HDListen::decodemsg() {//protected
 		sprintf(curmsg, "%d", ival);
 		msgval = curmsg;
 	} else if (msgfmt == "string") {
-//LOGD("DECODEMSG: string");
+LOGD("DECODEMSG: string");
 		msgval = curmsg;
+		if (msgval.length() < 22) return msgval;
 		msgval = msgval.substr(20, msgval.size() - 20);
 		msgval = hexbytestostring(msgval);
 	} else if (msgfmt == "band:int") {
-//LOGD("DECODEMSG: band:int");
+LOGD("DECODEMSG: band:int");
 		msgval = curmsg;
+		if (msgval.length() < 22) return msgval;
 		val1 = msgval.substr(0, 19);
 		val2 = msgval.substr(20, 19);
 		ival = hexbytestoint(val2);
@@ -366,10 +368,10 @@ string HDListen::decodemsg() {//protected
 		}
 */
 	} else if (msgfmt == "none" || msgfmt == "int:string") {
-//LOGD("DECODEMSG: int:string");
+LOGD("DECODEMSG: int:string");
 		msgval = "";
 	}
-//	LOGD("Message name: %s, Value: %s",msgname.c_str(),msgval.c_str());
+	LOGD("Message name: %s, Value: %s",msgname.c_str(),msgval.c_str());
 	//sethdval(msgname, msgval);
 
 	//here send it up to java.
@@ -414,6 +416,7 @@ void HDListen::callback(string name, string val){
 	LOGD("CALLBACK: %s / %s", name.c_str(), val.c_str());
 	bool fm = false;
 	bool rds = false;
+	int freq = 0;
 	char prop[PROP_VALUE_MAX];
 	android::sp<android::hardware::broadcastradio::V1_1::ITunerCallback> mCB = nullptr;
 	property_get("service.broadcastradio.on", prop, "0");
@@ -423,7 +426,10 @@ void HDListen::callback(string name, string val){
 		mCB = android::hardware::broadcastradio::V1_1::ITunerCallback::castFrom(cb).withDefault(nullptr);
 		if (strcmp(name.c_str(), "seek") == 0){
 			fm = (strstr(val.c_str(), "FM") != NULL);
-			pi.base.channel = (int)(atof(val.c_str()) * (fm?1000:1));
+			freq = (int)(atof(val.c_str()) * (fm?1000:1));
+			if (fm && (freq < 85000 || freq > 109000)) return;
+			if (!fm && (freq < 500 || freq > 1800)) return;
+			pi.base.channel = freq;
 			ps.primaryId.type = 1;
 			ps.primaryId.value = (int)(atof(val.c_str()) * (fm?1000:1));
 			pi.selector = ps;
@@ -437,7 +443,10 @@ void HDListen::callback(string name, string val){
 			rds_rt = "";
 			rds_genre = "";
 			fm = (strstr(val.c_str(), "FM") != NULL);
-			pi.base.channel = (int)(atof(val.c_str()) * (fm?1000:1));
+			freq = (int)(atof(val.c_str()) * (fm?1000:1));
+			if (fm && (freq < 85000 || freq > 109000)) return;
+			if (!fm && (freq < 500 || freq > 1800)) return;
+			pi.base.channel = freq;
 			ps.primaryId.type = 1;
 			ps.primaryId.value = (int)(atof(val.c_str()) * (fm?1000:1));
 			pi.selector = ps;
@@ -516,7 +525,7 @@ void HDListen::procmsg() {//protected
 			msgtype[num] = '0';
 		}
 	}
-// 	cout << "Message type: " << msgtype << ", Message code: " << msgcode << endl;
+ 	cout << "Message type: " << msgtype << ", Message code: " << msgcode << endl;
 //Don't bother with set or get commands that won't give us data.
 	if (strcmp(msgtype,"0x00 0x00") == 0 || strcmp(msgtype,"0x01 0x00") == 0)
 		return;
@@ -542,7 +551,7 @@ void HDListen::procmsg() {//protected
 		curmsg[cp] = 000;
 	}
 	usleep(naptime);
-// 	LOGD("Message... code: %s, type: %s, value: %s",msgcode,msgtype,curmsg);
+ 	LOGD("Message... code: %s, type: %s, value: %s",msgcode,msgtype,curmsg);
 	decodemsg();
 	return;
 }
@@ -666,8 +675,8 @@ void HDListen::stopreading() {//public
  * start a separate listener thread.
  */
 void *StartHDListener(void* ctx) {
-    HDListen *hdl = static_cast<HDListen *>(ctx);
-    hdl->listenthread();
-    return 0;
+	HDListen *hdl = static_cast<HDListen *>(ctx);
+	hdl->listenthread();
+	return 0;
 }
 
