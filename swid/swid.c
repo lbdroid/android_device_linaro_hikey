@@ -152,7 +152,7 @@ void *key_read(){
 	// forever listen for connections
 	while (1){
 		if ((key_client_fd = accept(key_fd, NULL, NULL)) == -1) {
-			perror("accept error");
+			__android_log_print(ANDROID_LOG_ERROR, "SWId", "accept error");
 			continue;
 		}
 
