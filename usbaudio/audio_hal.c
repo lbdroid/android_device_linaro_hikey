@@ -58,6 +58,9 @@
 
 #define AUDIO_PARAMETER_LINEIN "line_in_ctl"
 
+#define AUDIO_PARAMETER_CONNECT "connect"
+#define AUDIO_PARAMETER_DISCONNECT "disconnect"
+
 #define DEFAULT_INPUT_BUFFER_SIZE_MS 20
 
 /* TODO
@@ -111,7 +114,7 @@
 
 
 /* Lock play & record samples rates at or above this threshold */
-#define RATELOCK_THRESHOLD 96000
+#define RATELOCK_THRESHOLD 192000
 
 struct audio_device {
     struct audio_hw_device hw_device;
@@ -944,7 +947,7 @@ static ssize_t in_read(struct audio_stream_in *stream, void* buffer, size_t byte
     int ret = 0;
 
     struct stream_in * in = (struct stream_in *)stream;
-
+ALOGD("%s: in_read bytes: %d", __func__, bytes);
     stream_lock(&in->lock);
     if (in->adev->sco_thread != 0){
         stream_unlock(&in->lock);
@@ -1021,7 +1024,7 @@ static uint32_t in_get_input_frames_lost(struct audio_stream_in *stream)
 }
 
 static int adev_open_input_stream(struct audio_hw_device *hw_dev,
-                                  audio_io_handle_t handle,
+                                  audio_io_handle_t handle,			// this is an int
                                   audio_devices_t devicesSpec __unused,
                                   struct audio_config *config,
                                   struct audio_stream_in **stream_in,
@@ -1029,8 +1032,12 @@ static int adev_open_input_stream(struct audio_hw_device *hw_dev,
                                   const char *address,
                                   audio_source_t source __unused)
 {
-    ALOGV("adev_open_input_stream() rate:%" PRIu32 ", chanMask:0x%" PRIX32 ", fmt:%" PRIu8,
+    ALOGD("adev_open_input_stream() rate:%" PRIu32 ", chanMask:0x%" PRIX32 ", fmt:%" PRIu8,
           config->sample_rate, config->channel_mask, config->format);
+
+    if (devicesSpec == 0x80002000){
+        ALOGD("%s: Broadcast Radio", __func__);
+    }
 
     struct stream_in *in = (struct stream_in *)calloc(1, sizeof(struct stream_in));
     int ret = 0;
@@ -1080,10 +1087,12 @@ static int adev_open_input_stream(struct audio_hw_device *hw_dev,
     if (in->adev->device_sample_rate != 0 &&                 /* we are playing, so lock the rate */
         in->adev->device_sample_rate >= RATELOCK_THRESHOLD) {/* but only for high sample rates */
         ret = config->sample_rate != in->adev->device_sample_rate ? -EINVAL : 0;
+	ALOGD("%s: ret = %d (0 is good, %d is bad)", __func__, ret, -EINVAL);
         proxy_config.rate = config->sample_rate = in->adev->device_sample_rate;
     } else if (profile_is_sample_rate_valid(in->profile, config->sample_rate)) {
         proxy_config.rate = config->sample_rate;
     } else {
+        ALOGD("%s: -EINVAL - invalid sample rate", __func__);
         proxy_config.rate = config->sample_rate = profile_get_default_sample_rate(in->profile);
         ret = -EINVAL;
     }
@@ -1100,6 +1109,7 @@ static int adev_open_input_stream(struct audio_hw_device *hw_dev,
         } else {
             proxy_config.format = profile_get_default_format(in->profile);
             config->format = audio_format_from_pcm_format(proxy_config.format);
+            ALOGD("%s: -EINVAL - invalid format", __func__);
             ret = -EINVAL;
         }
     }
@@ -1134,6 +1144,7 @@ static int adev_open_input_stream(struct audio_hw_device *hw_dev,
         if (in->hal_channel_mask != config->channel_mask &&
             config->channel_mask != AUDIO_CHANNEL_NONE) {
             config->channel_mask = in->hal_channel_mask;
+            ALOGD("%s: -EINVAL - messed up channel mask", __func__);
             ret = -EINVAL;
         }
     } else {
@@ -1166,7 +1177,14 @@ static int adev_open_input_stream(struct audio_hw_device *hw_dev,
             config->format = audio_format_from_pcm_format(proxy_get_format(&in->proxy));
             config->sample_rate = proxy_get_sample_rate(&in->proxy);
         }
-    }
+    }/* else if (devicesSpec == 0x80002000){
+        ret = 0;
+        in->standby = true;
+        in->conversion_buffer = NULL;
+        in->conversion_buffer_size = 0;
+        *stream_in = &in->stream;
+        adev_add_stream_to_list(in->adev, &in->adev->input_stream_list, &in->list_node);
+    }*/
 
     if (ret != 0) {
         // Deallocate this stream on error, because AudioFlinger won't call
@@ -1629,6 +1647,24 @@ static int adev_set_parameters(struct audio_hw_device *hw_dev, const char *kvpai
 
         set_line_in(hw_dev);
     }
+
+    // TODO: This isn't the right way to do this, because the AMFM radio won't "mute" like this.
+    // Also (need to test) might cause the microphone to be echoed out the speakers.
+/*    ret = str_parms_get_str(parms, AUDIO_PARAMETER_CONNECT, value, sizeof(value));
+    if (ret >= 0){
+        if (strcmp(value, "-2147475456") == 0){
+            adev->line_in = true;
+            set_line_in(hw_dev);
+        }
+    }
+*/
+/*    ret = str_parms_get_str(parms, AUDIO_PARAMETER_DISCONNECT, value, sizeof(value));
+    if (ret >= 0){
+        if (strcmp(value, "-2147475456") == 0){
+            adev->line_in = false;
+            set_line_in(hw_dev);
+        }
+    }*/
 
     return 0;
 }

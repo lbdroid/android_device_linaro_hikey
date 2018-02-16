@@ -33,6 +33,7 @@
         <devicePort tagName="USB Headset Out" type="AUDIO_DEVICE_OUT_USB_HEADSET" role="sink"/>
         <devicePort tagName="USB Device In" type="AUDIO_DEVICE_IN_USB_DEVICE" role="source"/>
         <devicePort tagName="USB Headset In" type="AUDIO_DEVICE_IN_USB_HEADSET" role="source"/>
+        <!--devicePort tagName="Broadcast Radio" type="AUDIO_DEVICE_IN_FM_TUNER" role="source"/-->
     </devicePorts>
     <routes>
         <route type="mix" sink="USB Host Out"
@@ -42,6 +43,6 @@
         <route type="mix" sink="USB Headset Out"
                sources="usb_device output"/>
         <route type="mix" sink="usb_device input"
-               sources="USB Device In,USB Headset In"/>
+               sources="USB Device In,USB Headset In"/><!--,Broadcast Radio"/-->
     </routes>
 </module>
