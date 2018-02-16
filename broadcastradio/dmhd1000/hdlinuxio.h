@@ -40,7 +40,7 @@ class LinuxPort {
 		string getserialport();
 		void hdsendbyte(char);
 		void hdsendbytes(char*);
-		char* hdreadbytes(int);
+		unsigned char* hdreadbytes(int);
 		char* hdreadbyte();
 		int hdlastreadleangth();
 		void toggledtr(bool);

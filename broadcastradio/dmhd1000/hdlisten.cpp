@@ -1,18 +1,3 @@
-/*
- * HD Radio Controller
- * (c) Hal Vaughan 2008
- * hal@halblog.com
- * licensed under the Free Software Foundations General Public License 2.0
- *
- * This program makes it possible to control several different HD and satellite
- * radios from Linux.  It can be used for simple command line control as well as
- * control from a more sophisticated program using this interface as a library.
- *
- * Control protocols provided by Paul Cotter.
- */
-
-//Most of these are not needed if we use only the fileio function
-// instead of the portio function.
 #include <iostream>
 #include <string>
 #include <map>
@@ -56,15 +41,9 @@ HDListen::HDListen() {//public
 	listenThread = 0;
 	cktotal = 0;
 	ioport = 0;
-//	j_cls = 0;
-//	s_Jvm = 0;
 	hdvals = 0;
-	//bq=0;
-	//TODO I'm not crazy about this;
 	bq = (int *)malloc(sizeof(int)*1024);
 	radiovals["initialized"] = "true";
-//DEBUG:
-// 	verbose = true;
 	return;
 }
 
@@ -213,142 +192,73 @@ map<int,string> HDListen::gethdartists() {//public
 }
 
 /**
- * Simple routine to output the character in a readable 0x00 format,
- * followed by an int version, followed by a printable character (if
- * it is printable).  There is one subtlity: if we have a code for the
- * current characters (as in we know we're getting specific data), then
- * the separator between the hex and dec numbers is ":", if we don't have
- * a code, it's "-".  The A4 code saying we're starting data will always
- * have a "-" in it.
- * @param cIn the character to print
- */
-void HDListen::chout(unsigned char cIn) {//protected
-
-	char chex [10];
-	int iIn;
-
-	iIn = cIn;
-	if (iIn == 0xA4) {
-		cout << endl << endl;
-	}
-	sprintf(chex, "0x%2X", cIn);
-	if (chex[2] == ' ')
-		chex[2] = '0';
-	if (havecode)
-		cout << chex << ":" << iIn << " [";
-	else
-		cout << chex << "-" << iIn << " [";
-	if (iIn >= 32 && iIn <= 126) {
-		cout << cIn;
-	}
-	cout << "] ";
-// 	cout << endl;
-	return;
-}
-
-/**
- * Convert a string of hex represented bytes (like "0xAC 0x1C") into an integer.
- * @param inbytes the string to be converted to an integer
- * @return the integer
- */
-int HDListen::hexbytestoint(string inbytes) {//protected
-	int i1, i2, i3, i4;
-	long ans;
-	string xfer = "0x";
-	if (inbytes.size() > 19)
-		inbytes = inbytes.substr(0, 19);
-	sscanf(inbytes.c_str(), "%X %X %X %X", &i1, &i2, &i3, &i4);
-	ans = i1 + (256 * i2) + (65536 * i3) + (16777216 * i4);
-	if (ans > 65535)
-		i1 = -1;
-	else
-		i1 = ans;
-	return i1;
-}
-
-/**
- * Convert a string of hex represented bytes in the form of "0xAB 0x12" and
- * convert it into a string of readable characters.
- * @param inbytes the string to convert
- * @return the converted string
- */
-string HDListen::hexbytestostring(string inbytes) {//protected
-	char c;
-	int ival;
-	unsigned int istart;
-	string xfer, sval = "";
-
-	istart = 0;
-	curmsg[0] = 000;
-	while (istart < inbytes.size() - 3) {
-		xfer = inbytes.substr(istart, 4);
-		sscanf(xfer.c_str(), "%X", &ival);
-		c = ival;
-		sval += c;
-		istart += 5;
-	}
-	return sval;
-}
-
-/**
  * Process a complete message we've received from the radio.  See what kind of format it is in,
  * what the message name is, and what the data is.  Store the result as the proper key/value pair
  * in the map of values.
  */
-string HDListen::decodemsg() {//protected
-	char xfer[10];
+string HDListen::decodemsg(unsigned char *message) {//protected
 	int ival;
 	string msgname, msgfmt, msgval = "", val1, val2, valx;
-	msgname = hdvals->getcommand(msgcode);
+	uint32_t len = 0;
+	uint32_t i;
+
+	char mesbuf[4096];
+	mesbuf[0] = 0;
+
+	for (i=0; i<message[1]+3; i++){
+		sprintf(mesbuf+strlen(mesbuf), "%02X ", message[i]);
+	}
+	LOGD("Received BUFFER: %s", mesbuf);
+
+	msgname = hdvals->getcmd(message[2], message[3]);
 	msgfmt = hdvals->getformat(msgname);
-	msgval = curmsg;
 	if (msgfmt == "boolean") {
-LOGD("DECODEMSG: boolean");
 		if (msgval == hdvals->getconstant("one"))
 			msgval = "true";
 		else
 			msgval = "false";
 	} else if (msgfmt == "int") {
-LOGD("DECODEMSG: int");
-		ival = hexbytestoint(msgval);
-		if (hdvals->getscaled(msgname)) {
-			ival = (ival * 100)/90;
-		}
+		// A4 08 01 01 02 00 2C 01 00 00
+		// A4: start of message
+		// 08: length
+		// 01 01: signal strength
+		// 02 00: reply
+		// 2C 01: value (little endian)
+		// 00 00: ???
+		ival = ((int)message[6] + (((int)message[7])<<8));
 		sprintf(curmsg, "%d", ival);
 		msgval = curmsg;
 	} else if (msgfmt == "string") {
-LOGD("DECODEMSG: string");
-		msgval = curmsg;
-		if (msgval.length() < 22) return msgval;
-		msgval = msgval.substr(20, msgval.size() - 20);
-		msgval = hexbytestostring(msgval);
+		// A4: header
+		// 10: packet length
+		// 08 03: RDS PS
+		// 02 00: response
+		// 08 00 00 00: string length
+		// 20 20 38 38 2E 35 20 20 "  88.5  "
+		// 1C: checksum
+
+		len = ((uint32_t)message[6]) + (((uint32_t)message[7])<<8) + (((uint32_t)message[8])<<16) + (((uint32_t)message[9])<<24);
+		for (i=10; i<len+10; i++) msgval += message[i];
 	} else if (msgfmt == "band:int") {
-LOGD("DECODEMSG: band:int");
-		msgval = curmsg;
-		if (msgval.length() < 22) return msgval;
-		val1 = msgval.substr(0, 19);
-		val2 = msgval.substr(20, 19);
-		ival = hexbytestoint(val2);
-		sprintf(xfer, "%d", ival);
-		msgval = xfer;
-		currfreq = xfer;
-		val2 = msgval.substr(msgval.size() - 1, 1);
-		msgval = msgval.substr(0, msgval.size() - 1);
-		if (val1 == hdvals->getband("am")) {
-			val1 = "AM";
-			currband = "am";
-		} else {
-			val1 = "FM";
-			currband = "fm";
-			msgval += ".";
+		// Received BUFFER: A4 14 03 01 02 00 01 00 00 00 CF 03 00 00 00 00 00 00 00 00 00 00 91
+		// A4: header
+		// 14: length
+		// 03 01: seek
+		// 02 00: response
+		// 01 00 00 00: FM (00 00 00 00 = AM)
+		// CF 03 ....: freq little-endian 0x03cf = 975 = 97.5 MHz
+
+		if (message[6] == 0x01){ // FM
+			sprintf(curmsg, "%d FM", (int)message[10] + ((int)message[11]<<8));
+		} else { // AM
+			sprintf(curmsg, "%d AM", (int)message[10] + ((int)message[11]<<8));
 		}
-		msgval += val2;
-		msgval += " ";
-		msgval += val1;
-/* Lets just disable HD radio altogether. It can only cause annoyance.
+		msgval = curmsg;
+
+	/* Lets just disable HD radio altogether. It can only cause annoyance.
 	} else if (msgfmt == "int:string") {
 		if (currentsubchannel < 1) {
-// 			cout << "Setting subchannel to 1\n";
+			cout << "Setting subchannel to 1\n";
 			currentsubchannel = 1;
 			sethdval("hdsubchannel", "1");
 		}
@@ -366,25 +276,16 @@ LOGD("DECODEMSG: band:int");
 		if (currentsubchannel != ival) {
 			return msgval;
 		}
-*/
+	*/
 	} else if (msgfmt == "none" || msgfmt == "int:string") {
-LOGD("DECODEMSG: int:string");
 		msgval = "";
 	}
 	LOGD("Message name: %s, Value: %s",msgname.c_str(),msgval.c_str());
-	//sethdval(msgname, msgval);
 
-	//here send it up to java.
 	callback(msgname,msgval);
 	return msgval;
 }
 
-/*
-void HDListen::passJvm(JavaVM * jvm, jclass jcls){
-	s_Jvm = jvm;
-	j_cls = jcls;
-}
-*/
 void HDListen::passCB(
 		android::hardware::broadcastradio::V1_1::ProgramSelector in_ps,
 		android::hardware::broadcastradio::V1_1::ProgramInfo in_pi,
@@ -426,12 +327,12 @@ void HDListen::callback(string name, string val){
 		mCB = android::hardware::broadcastradio::V1_1::ITunerCallback::castFrom(cb).withDefault(nullptr);
 		if (strcmp(name.c_str(), "seek") == 0){
 			fm = (strstr(val.c_str(), "FM") != NULL);
-			freq = (int)(atof(val.c_str()) * (fm?1000:1));
+			freq = (int)(atof(val.c_str()) * (fm?100:1));
 			if (fm && (freq < 85000 || freq > 109000)) return;
 			if (!fm && (freq < 500 || freq > 1800)) return;
 			pi.base.channel = freq;
 			ps.primaryId.type = 1;
-			ps.primaryId.value = (int)(atof(val.c_str()) * (fm?1000:1));
+			ps.primaryId.value = freq;
 			pi.selector = ps;
 			pi.base.tuned = 0;
 			pi.base.stereo = 1;
@@ -443,12 +344,12 @@ void HDListen::callback(string name, string val){
 			rds_rt = "";
 			rds_genre = "";
 			fm = (strstr(val.c_str(), "FM") != NULL);
-			freq = (int)(atof(val.c_str()) * (fm?1000:1));
+			freq = (int)(atof(val.c_str()) * (fm?100:1));
 			if (fm && (freq < 85000 || freq > 109000)) return;
 			if (!fm && (freq < 500 || freq > 1800)) return;
 			pi.base.channel = freq;
 			ps.primaryId.type = 1;
-			ps.primaryId.value = (int)(atof(val.c_str()) * (fm?1000:1));
+			ps.primaryId.value = freq;
 			pi.selector = ps;
 			pi.base.tuned = 1;
 			pi.base.stereo = 1;
@@ -472,7 +373,6 @@ void HDListen::callback(string name, string val){
 			else pi.base.signalStrength = (int)(((float) (pi.base.signalStrength - 400) / (float) 2450) * 100);
 			mCB->currentProgramInfoChanged(pi);
 		}
-
 		if (rds) {
 			pi.base.metadata = android::hardware::hidl_vec<android::hardware::broadcastradio::V1_0::MetaData>(3);
 			pi.base.metadata[0] = {
@@ -509,154 +409,13 @@ void HDListen::callback(string name, string val){
 }
 
 /**
- * Take the bytes that have come in for an entire message and do the basic processing
- * to put them in a form that can be easily decoded.
- */
-void HDListen::procmsg() {//protected
-	int x, y, num, cp = 0, t;
-	char chex[6] = {"0x%2X"};
-	sprintf(msgcode, "0x%2X 0x%2X", bq[0], bq[1]);
-	sprintf(msgtype, "0x%2X 0x%2X", bq[2], bq[3]);
-	for (num = 2; num < 8; num += 5) {
-		if (msgcode[num] == ' ') {
-			msgcode[num] = '0';
-		}
-		if (msgtype[num] == ' ') {
-			msgtype[num] = '0';
-		}
-	}
- 	cout << "Message type: " << msgtype << ", Message code: " << msgcode << endl;
-//Don't bother with set or get commands that won't give us data.
-	if (strcmp(msgtype,"0x00 0x00") == 0 || strcmp(msgtype,"0x01 0x00") == 0)
-		return;
-	currentmsg = "";
-	curmsg[0] = 000;
-	cp = 0;
-	for (x = 4; x < msglen; x++) {
-		num = bq[x];
-		if (cp != 0) {
-			curmsg[cp++] = ' ';
-		}
-		t = cp + 2;
-		y = 0;
-		do {
-			curmsg[cp + y] = chex[y];
-			y++;
-		} while (chex[y] != 000);
-		cp = t + 2;
-		curmsg[cp + 2] = 000;
-		sprintf(curmsg, curmsg, num);
-		if (curmsg[t] == ' ')
-			curmsg[t] = '0';
-		curmsg[cp] = 000;
-	}
-	usleep(naptime);
- 	LOGD("Message... code: %s, type: %s, value: %s",msgcode,msgtype,curmsg);
-	decodemsg();
-	return;
-}
-
-/**
- * Process an incoming character.  If it's 0xA4 and not escaped, it's part of an incoming message.
- * Also check for bytes indicating message length, the checksum at the end of the message, and so on.
- * Basically make sure we get an entire message and when we do, pass it on for further processing to
- * determine the type of message and content.  If a message is incomplete or doesn't have the right
- * checksum (rare), then it is just discarded.  When we call procmessage() we don't pass it on, since
- * the variables need to be accessed by different subroutines, they're global to this class.
- * @param cIn a character to be processed as part of the incoming stream of data from the radio.
- */
-void HDListen::handlebyte(unsigned char cIn) {//protected
-	unsigned int cksum;
-
-	
-//LOGD("Processing byte: %x",cIn);
-// 	cout << "Processing byte: ";
-// 	chout(cIn);
-	if (cIn != 0xA4 && !havecode) {
-// 		cout << "Received byte without reply active\n";
-		return;
-	}
-// 	cout << "Length wait: " << lengthWait << ", Msgin: " << msgin << ", Msglen: " << msglen << endl;
-	if (cIn == 0xA4 && !lengthWait && !(msgin == msglen && msglen >= 1)) {
-		
-		if (havecode) {
-			if (verbose) cout << "New reply code received in middle of message.  Discarding data and restarting.\n";
-		} else {
- 			//cout << "New reply code starting from scratch\n";
-		}
-		havecode = true;
-		msglen = 0;
-		msgin = 0;
-//		if (bq != 0) free(&bq);
-		cktotal = 0xA4;
-		currentmsg[0] = 00;
-		lengthWait = true;
-		escChar = false;
-		return;
- 		cout << "New message flag received. ";
-	}
-	if (msglen == 0) {
-		msglen = cIn;
-// 		cout << "Setting message length: " << msglen << " ";
-		cktotal += cIn;
-		lengthWait = false;
-		return;
-	}
-	lengthWait = false;
-// 	cout << "Message length: " << msglen << ", Message in: " << msgin << endl;
-	if (msgin < msglen) {
-		if (cIn == 0x1B && !escChar) {
-			escChar = true;
-			return;
-		}
-		if (escChar) {
-			escChar = false;
-			if (cIn == 0x48)
-				cIn = 0xA4;
-		}
-//LOGD("adding byte to bq[%d]:%x",msgin, cIn);
- 		bq[msgin] = cIn;
-		cktotal += cIn;
- 		cout << "Current checksum: " << cktotal << endl;
-		msgin++;
-		return;
- 		cout << "\tMessage in: " << msgin << endl;
-	} else if (msgin == msglen) {
-		havecode = false;
-		cksum = cIn;
-		cout << "Raw checksum: " << cktotal << ", Received byte: " << cksum << ", ";
-		cktotal = cktotal % 256;
-		cout << "Our checksum: " << cktotal << ", Their checksum: " << cksum << endl;
-
-		// The checksum calculation routines are *WRONG*, therefore ignore and process the message anyway.
-		procmsg();
-
-		msglen = -1;
-		msgin = -1;
-	}
-	if (msgin > msglen) {
-		if (verbose) cout << "Error: Received message did not match given length.  Data discarded\n";
-		havecode = false;
-	}
-
-	return;
-}
-
-/**
- * Read input from the serial port, then pass each byte to the byte handling routine.
- * Every byte that is read in is passed to handlebyte() so it can process it.
+ * Read input from the serial port
  */
 void HDListen::readinfile() {//protected
-	char *buff = new char[10];
-	unsigned char cIn;
-
-//TODO: this does not seem efficient.
+	unsigned char *buff;
 	while (keepReading) {
-// 		cout << "Start of read loop\n";
 		buff = ioport->hdreadbytes(1);
-		cIn = buff[0];
-//printf("BYTE: 0x%x\n",cIn);
-		handlebyte(cIn);
+		if (buff != NULL) decodemsg(buff);
 	}
 	return;
 }

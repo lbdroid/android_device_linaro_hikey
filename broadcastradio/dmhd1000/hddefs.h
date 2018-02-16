@@ -17,8 +17,11 @@ class HDVals {
 		 map<string,string> hd_constants;
 		 map<string,string> hd_scale;
 
+		string commands[32][32];
+
 	public:
 		HDVals();
+		string getcmd(unsigned char, unsigned char);
 		string getcode(string);
 		string getcommand(string);
 		string getop(string);

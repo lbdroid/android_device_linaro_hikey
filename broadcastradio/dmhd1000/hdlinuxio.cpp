@@ -23,7 +23,10 @@
 #include <sys/stat.h>
 #include <time.h>
 #include "hdlinuxio.h"
+#include <android/log.h>
 using namespace std;
+
+#define  LOGD(...)  __android_log_print(ANDROID_LOG_DEBUG,"RADIO",__VA_ARGS__)
 
 /**
  * Create the LinuxPort class.  Set all initial variables.
@@ -140,54 +143,43 @@ bool LinuxPort::testport(string serport) { //public
  * could effect the state of the DTR line in some cases.
  * @param portfd the file descriptor for the port we're setting
  */
-void LinuxPort::setportattr(int portfd) { //public
+void LinuxPort::setportattr(int fd) { //public
+	struct termios tty;
 	int status;
-// 	tcgetattr(portfd, &options);
-//Set the baud rate (duh!)
-//Should never change, set at 115200
-	options.c_cflag = 0 | BAUD;
-// 	options.c_cflag = BAUD;
-//Next 4 set 8N1, 8 data bits, no parity, 1 stop bit
-//DO NOT CHANGE
-// 	options.c_cflag = CS8;
-	options.c_cflag &= ~PARENB;
-	options.c_cflag &= ~CSTOPB;
-	options.c_cflag &= ~CSIZE;
-	options.c_cflag |= CS8;
-//Always use!
-	options.c_cflag |= (CLOCAL | CREAD);
-//disable RTS/CTS line for flow control
-//works on RS232 and USB on original system
-	options.c_cflag &= ~CRTSCTS;
-//Needed to make sure the radio disconnects when this program
-//exits or is killed or crashes or stops in some way that we
-//can't control.
-	options.c_cflag |= HUPCL;
-//Enable software flow control
-//Note relationship with xon/xoff software flow and RTSCTS
-//hardware control.  If one's on, the other should be off.
-//Works on RS232 and USB on original test system
-// 	options.c_iflag = (IGNBRK | IGNPAR);
-// 	options.c_iflag |= (IXON | IXOFF | IXANY);
-	options.c_iflag = 0 | (IGNBRK | IGNPAR);
-	options.c_iflag = (IXON | IXOFF | IXANY);
-//Disable software flow control
-//Works on RS232 but not on USB on original test system
-//(Should not work, since software control is needed)
-// 	options.c_iflag &= ~(IXON | IXOFF | IXANY);
-//Suggested by Paul on testing for USB
-	options.c_oflag = 0;
-	options.c_lflag = 0;
-//enableable RTS/CTS line for flow control
-//horks system on RS232 and USB on original system
-	int rc = tcsetattr(portfd, TCSANOW, &options);
-	cout << "\tSerial port attribute set return code: " << rc << endl;
+	memset (&tty, 0, sizeof tty);
+	if (tcgetattr (fd, &tty) != 0){
+		printf ("error %d from tcgetattr\n", errno);
+		return;
+	}
 
-//turn off the hardware mute:
+	cfsetospeed (&tty, B115200);
+	cfsetispeed (&tty, B115200);
+
+	tty.c_cflag = (tty.c_cflag & ~CSIZE) | CS8;	// 8-bit chars
+	// disable IGNBRK for mismatched speed tests; otherwise receive break as \000 chars
+	tty.c_iflag &= ~IGNBRK;				// disable break processing
+	tty.c_lflag = 0;				// no signaling chars, no echo,
+							// no canonical processing
+	tty.c_oflag = 0;				// no remapping, no delays
+	tty.c_cc[VMIN]  = 0xff;				// read blocks for min 255 bytes
+	tty.c_cc[VTIME] = 5;				// 0.5 seconds read timeout
+
+	tty.c_iflag &= ~(IXON | IXOFF | IXANY);		// shut off xon/xoff ctrl
+
+	tty.c_cflag |= (CLOCAL | CREAD);		// ignore modem controls,
+							// enable reading
+	tty.c_cflag &= ~(PARENB | PARODD);		// shut off parity
+	tty.c_cflag |= 0;//parity;
+	tty.c_cflag &= ~CSTOPB;
+	tty.c_cflag &= ~CRTSCTS;
+
+	if (tcsetattr (fd, TCSANOW, &tty) != 0){
+		printf ("error %d from tcsetattr\n", errno);
+		return;
+	}
 	ioctl(portfd, TIOCMGET, &status);
 	status &= ~TIOCM_RTS;
 	ioctl(portfd, TIOCMSET, &status);
-
 	return;
 }
 
@@ -198,7 +190,7 @@ bool LinuxPort::openport() { //public
 	if (isOpen) return true;
 	isOpen = true;
 	cout << "Opening port: " << serialdevice << endl;
-	portfd = open(serialdevice.c_str(), O_RDWR | O_NOCTTY | O_NDELAY);
+	portfd = open(serialdevice.c_str(), O_RDWR | O_NOCTTY | O_SYNC);// | O_NDELAY);
 	setportattr(portfd);
 	if (portfd == 0) {
 		return false;
@@ -277,30 +269,36 @@ void LinuxPort::hdsendbytes(char* outbytes) { //public
  * @param ilen number of bytes to read in
  * @return pointer to the buffer where  returned data is stored.
  */
-char* LinuxPort::hdreadbytes(int ilen) { //public
-	char* buff = new char[1024];
+unsigned char* LinuxPort::hdreadbytes(int ilen) { //public
+	unsigned char* buff = new unsigned char[1024];
 	int rd = 0;
-	//bool loopflag = false;
 
+	int n, i;
+	unsigned char cs;
 	buff[0] = 0;
 	if (ilen > 1024)
 		return buff;
-// 	cout << "Entering wait/read loop, FD: " << portfd << ", Length: " << ilen << endl;
 	if (!isOpen) {
-		cout << "Having to re-open port\n";
+		LOGD("Having to re-open port");
 		openport();
 	}
 	while (rd < 1) {
-// 		cout << "Waiting for byte...\n";
-//TODO: This is *horrible*. Must fix.
-		rd = read(portfd, buff, ilen);
-		usleep(naptime);
-// 		if (!loopflag && rd < 1) cout << "\nWaiting, read length: " << rd << endl;
-// 		if (!loopflag) cout << "\tLast read: " << lastread << ", Waiting...\n";
-		//loopflag = true;
+		n = read(portfd, buff, 1);
+		if (n != 1 || buff[0] != 0xa4) continue;
+		n = read(portfd, buff+1, 1);
+		if (n != 1) continue;
+		n = read(portfd, buff+2, buff[1]+1);
+		if (n < buff[1]+1) continue;
+		cs = 0;
+		for (i=0; i<buff[1]+2; i++){
+			cs += buff[i];
+		}
+		LOGD("Calculated CS: 0x%02X, read CS: 0x%02X", cs, buff[buff[1]+2]);
+		if (cs != buff[buff[1]+2]) continue;
+
+		rd = 1;
 	}
 	lastread = rd;
-// 	cout << "Got a byte, read length: " << rd << endl;
 	return buff;
 }
 
@@ -309,7 +307,7 @@ char* LinuxPort::hdreadbytes(int ilen) { //public
  * @return pointer to a 1 byte buffer with one byte read from the port
  */
 char* LinuxPort::hdreadbyte() { //public
-	char* buff = hdreadbytes(1);
+	char* buff = (char*)hdreadbytes(1);
 	return buff;
 }
 

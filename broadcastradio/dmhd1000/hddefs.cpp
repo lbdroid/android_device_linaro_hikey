@@ -40,6 +40,40 @@ using namespace std;
 HDVals::HDVals() {//public
 	keepreading = true;
 
+commands[0x01][0x00] = "power";
+commands[0x02][0x00] = "mute";
+commands[0x01][0x01] = "signalstrength";
+commands[0x02][0x01] = "tune";
+commands[0x03][0x01] = "seek";
+commands[0x01][0x02] = "hdactive";
+commands[0x02][0x02] = "hdstreamlock";
+commands[0x03][0x03] = "hdsignalstrength";
+commands[0x04][0x02] = "hdsubchannel";
+commands[0x05][0x02] = "hdsubchannelcount";
+commands[0x06][0x02] = "hdenablehdtuner";
+commands[0x07][0x02] = "hdtitle";
+commands[0x08][0x02] = "hdartist";
+commands[0x09][0x02] = "hdcallsign";
+commands[0x10][0x02] = "hdstationname";
+commands[0x11][0x02] = "hduniqueid";
+commands[0x12][0x02] = "hdapiversion";
+commands[0x13][0x02] = "hdhwversion";
+commands[0x01][0x03] = "rdsenable";
+commands[0x02][0x03] = "rdsunknown1";
+commands[0x03][0x03] = "rdsunknown2";
+commands[0x04][0x03] = "rdsunknown3";
+commands[0x05][0x03] = "rdsunknown4";
+commands[0x06][0x03] = "rdsunknown5";
+commands[0x07][0x03] = "rdsgenre";
+commands[0x08][0x03] = "rdsprogramservice";
+commands[0x09][0x03] = "rdsradiotext";
+commands[0x01][0x04] = "unknown1";
+commands[0x02][0x04] = "unknown2";
+commands[0x03][0x04] = "volume";
+commands[0x04][0x04] = "bass";
+commands[0x05][0x04] = "treble";
+commands[0x06][0x04] = "compression";
+
 	hd_cmds["power"] = "0x01 0x00";
 	hd_cmds["mute"] = "0x02 0x00";
 
@@ -169,6 +203,10 @@ string HDVals::getcommand(string code) {//public
 	if (code.length() > 0 && hd_codes.find(code) != hd_codes.end())
 		return hd_codes[code];
 	return "";
+}
+
+string HDVals::getcmd(unsigned char a, unsigned char b) {//public
+	return commands[a][b];
 }
 
 /**

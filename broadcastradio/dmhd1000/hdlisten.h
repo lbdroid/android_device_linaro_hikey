@@ -67,11 +67,7 @@ class HDListen {
 	protected:
 		void sethdval(string, string);
 		void chout(unsigned char);
-		int hexbytestoint(string);
-		string hexbytestostring(string);
-		string decodemsg();
-		void procmsg();
-		void handlebyte(unsigned char);
+		string decodemsg(unsigned char*);
 		void readinfile();
 
 	private:
