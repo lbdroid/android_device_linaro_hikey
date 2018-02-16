@@ -128,7 +128,8 @@ void HDControl::passJvm(JavaVM * jvm, jclass jcls){
 void HDControl::passCB(
 		android::hardware::broadcastradio::V1_1::ProgramSelector ps,
 		android::hardware::broadcastradio::V1_1::ProgramInfo pi,
-		android::sp<android::hardware::broadcastradio::V1_1::ITunerCallback> cb
+		const android::sp<android::hardware::broadcastradio::V1_0::ITunerCallback>& cb
+//		android::sp<android::hardware::broadcastradio::V1_1::ITunerCallback> cb
 	){
 	hdListen.passCB(ps, pi, cb);
 }

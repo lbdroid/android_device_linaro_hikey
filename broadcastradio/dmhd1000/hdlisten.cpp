@@ -20,6 +20,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <android/log.h>
+#include <cutils/properties.h>
 #include "hddefs.h"
 #include "hdlinuxio.h"
 #include "hdlisten.h"
@@ -385,11 +386,12 @@ void HDListen::passJvm(JavaVM * jvm, jclass jcls){
 void HDListen::passCB(
 		android::hardware::broadcastradio::V1_1::ProgramSelector in_ps,
 		android::hardware::broadcastradio::V1_1::ProgramInfo in_pi,
-		android::sp<android::hardware::broadcastradio::V1_1::ITunerCallback>& in_cb
+		const android::sp<android::hardware::broadcastradio::V1_0::ITunerCallback>& in_cb
 	){
 	ps = in_ps;
 	pi = in_pi;
 	cb = in_cb;
+	nocb = false;
 }
 
 void HDListen::callback(string name, string val){
@@ -412,7 +414,13 @@ void HDListen::callback(string name, string val){
 	LOGD("CALLBACK: %s / %s", name.c_str(), val.c_str());
 	bool fm = false;
 	bool rds = false;
-	if (cb != nullptr){
+	char prop[PROP_VALUE_MAX];
+	android::sp<android::hardware::broadcastradio::V1_1::ITunerCallback> mCB = nullptr;
+	property_get("service.broadcastradio.on", prop, "0");
+	LOGD("Read property service.broadcastradio.on = %s", prop);
+	
+	if (prop[0] == '1' && nocb != true){
+		mCB = android::hardware::broadcastradio::V1_1::ITunerCallback::castFrom(cb).withDefault(nullptr);
 		if (strcmp(name.c_str(), "seek") == 0){
 			fm = (strstr(val.c_str(), "FM") != NULL);
 			pi.base.channel = (int)(atof(val.c_str()) * (fm?1000:1));
@@ -423,7 +431,7 @@ void HDListen::callback(string name, string val){
 			pi.base.stereo = 1;
 			pi.base.digital = 0;
 			pi.base.signalStrength = 50;
-			cb->currentProgramInfoChanged(pi);
+			mCB->currentProgramInfoChanged(pi);
 		} else if (strcmp(name.c_str(), "tune") == 0){
 			rds_ps = "";
 			rds_rt = "";
@@ -437,7 +445,7 @@ void HDListen::callback(string name, string val){
 			pi.base.stereo = 1;
 			pi.base.digital = 0;
 			pi.base.signalStrength = 50;
-			cb->tuneComplete_1_1(android::hardware::broadcastradio::V1_0::Result::OK, pi.selector);
+			mCB->tuneComplete_1_1(android::hardware::broadcastradio::V1_0::Result::OK, pi.selector);
 			rds = true;
 		} else if (strcmp(name.c_str(), "rdsprogramservice") == 0){
 			rds_ps = val;
@@ -453,7 +461,7 @@ void HDListen::callback(string name, string val){
 			if (pi.base.signalStrength < 400) pi.base.signalStrength = 0;
 			else if (pi.base.signalStrength > 2850) pi.base.signalStrength = 100;
 			else pi.base.signalStrength = (int)(((float) (pi.base.signalStrength - 400) / (float) 2450) * 100);
-			cb->currentProgramInfoChanged(pi);
+			mCB->currentProgramInfoChanged(pi);
 		}
 
 		if (rds) {
@@ -482,8 +490,12 @@ void HDListen::callback(string name, string val){
 				rds_genre,
 				{}
 			};
-			cb->currentProgramInfoChanged(pi);
+			mCB->currentProgramInfoChanged(pi);
 		}
+	} else nocb = true;
+
+	if (cb == nullptr){
+		LOGD("CB is nullptr");
 	}
 }
 

@@ -1221,8 +1221,10 @@ void set_line_in(struct audio_hw_device *hw_dev){
 
     if (adev->line_in && adev->sco_thread == 0){
         mixer_ctl_set_value(line_in_ctl, 0, 1);
+        property_set("service.broadcastradio.on", "1");
     } else {
         mixer_ctl_set_value(line_in_ctl, 0, 0);
+        property_set("service.broadcastradio.on", "0");
     }
 }
 

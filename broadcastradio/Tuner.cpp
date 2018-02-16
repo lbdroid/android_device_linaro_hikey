@@ -56,17 +56,19 @@ Tuner::Tuner(V1_0::Class classId, const sp<V1_0::ITunerCallback>& callback)
       mCallback(callback),
       mCallback1_1(ITunerCallback::castFrom(callback).withDefault(nullptr)),
       mIsAnalogForced(false) {
+        ALOGD("Tuner::Tuner");
 	dmhd1000.activate();
 	sleep(1);
 	dmhd1000.setDTR(true);
 	sleep(1);
 	dmhd1000.hd_setvolume(50);
 	sleep(1);
-	dmhd1000.passCB(mCurrentProgram, mCurrentProgramInfo, mCallback1_1);
+	dmhd1000.passCB(mCurrentProgram, mCurrentProgramInfo, callback);// mCallback1_1);
 	mIsClosed = false;
 }
 
 void Tuner::forceClose() {
+    ALOGD("%s", __func__);
     lock_guard<mutex> lk(mMut);
     dmhd1000.close();
     mIsClosed = true;
@@ -74,7 +76,7 @@ void Tuner::forceClose() {
 }
 
 Return<Result> Tuner::setConfiguration(const BandConfig& config) {
-    ALOGV("%s", __func__);
+    ALOGD("%s", __func__);
     lock_guard<mutex> lk(mMut);
     if (mIsClosed) return Result::NOT_INITIALIZED;
     if (mClassId != Class::AM_FM) {
@@ -108,7 +110,7 @@ Return<Result> Tuner::setConfiguration(const BandConfig& config) {
 }
 
 Return<void> Tuner::getConfiguration(getConfiguration_cb _hidl_cb) {
-    ALOGV("%s", __func__);
+    ALOGD("%s", __func__);
     lock_guard<mutex> lk(mMut);
 
     if (!mIsClosed && mIsAmfmConfigSet) {
@@ -124,6 +126,8 @@ static ProgramInfo makeDummyProgramInfo(const ProgramSelector& selector) {
     ProgramInfo info11 = {};
     auto& info10 = info11.base;
 
+    ALOGD("%s", __func__);
+
     utils::getLegacyChannel(selector, &info10.channel, &info10.subChannel);
     info10.tuned = 1;
     info10.stereo = 1;
@@ -136,6 +140,7 @@ static ProgramInfo makeDummyProgramInfo(const ProgramSelector& selector) {
 }
 
 HalRevision Tuner::getHalRev() const {
+    ALOGD("%s", __func__);
     if (mCallback1_1 != nullptr) {
         return HalRevision::V1_1;
     } else {
@@ -169,7 +174,7 @@ void Tuner::tuneInternalLocked(const ProgramSelector& sel) {
 
 // This is not actually scan. This is SEEK to next channel in whatever direction
 Return<Result> Tuner::scan(Direction direction, bool skipSubChannel __unused) {
-    ALOGV("%s", __func__);
+    ALOGD("%s", __func__);
     lock_guard<mutex> lk(mMut);
     if (mIsClosed) return Result::NOT_INITIALIZED;
 
@@ -190,7 +195,7 @@ Return<Result> Tuner::scan(Direction direction, bool skipSubChannel __unused) {
 }
 
 Return<Result> Tuner::step(Direction direction, bool skipSubChannel) {
-    ALOGV("%s", __func__);
+    ALOGD("%s", __func__);
     lock_guard<mutex> lk(mMut);
     if (mIsClosed) return Result::NOT_INITIALIZED;
 
@@ -231,7 +236,7 @@ Return<Result> Tuner::step(Direction direction, bool skipSubChannel) {
 }
 
 Return<Result> Tuner::tune(uint32_t channel, uint32_t subChannel) {
-    ALOGV("%s(%d, %d)", __func__, channel, subChannel);
+    ALOGD("%s(%d, %d)", __func__, channel, subChannel);
     Band band;
     {
         lock_guard<mutex> lk(mMut);
@@ -241,7 +246,7 @@ Return<Result> Tuner::tune(uint32_t channel, uint32_t subChannel) {
 }
 
 Return<Result> Tuner::tuneByProgramSelector(const ProgramSelector& sel) {
-    ALOGV("%s(%s)", __func__, toString(sel).c_str());
+    ALOGD("%s(%s)", __func__, toString(sel).c_str());
     lock_guard<mutex> lk(mMut);
     if (mIsClosed) return Result::NOT_INITIALIZED;
 
@@ -283,7 +288,7 @@ Return<Result> Tuner::tuneByProgramSelector(const ProgramSelector& sel) {
 }
 
 Return<Result> Tuner::cancel() {
-    ALOGV("%s", __func__);
+    ALOGD("%s", __func__);
     lock_guard<mutex> lk(mMut);
     if (mIsClosed) return Result::NOT_INITIALIZED;
 
@@ -292,7 +297,7 @@ Return<Result> Tuner::cancel() {
 }
 
 Return<Result> Tuner::cancelAnnouncement() {
-    ALOGV("%s", __func__);
+    ALOGD("%s", __func__);
     lock_guard<mutex> lk(mMut);
     if (mIsClosed) return Result::NOT_INITIALIZED;
 
@@ -301,7 +306,7 @@ Return<Result> Tuner::cancelAnnouncement() {
 
 // TODO: callback from dmhd1000 to update info from RDS
 Return<void> Tuner::getProgramInformation(getProgramInformation_cb _hidl_cb) {
-    ALOGV("%s", __func__);
+    ALOGD("%s", __func__);
     return getProgramInformation_1_1([&](Result result, const ProgramInfo& info) {
         _hidl_cb(result, info.base);
     });
@@ -309,7 +314,7 @@ Return<void> Tuner::getProgramInformation(getProgramInformation_cb _hidl_cb) {
 
 // TODO: callback from dmhd1000 to update mCurrentProgramInfo from RDS
 Return<void> Tuner::getProgramInformation_1_1(getProgramInformation_1_1_cb _hidl_cb) {
-    ALOGV("%s", __func__);
+    ALOGD("%s", __func__);
     lock_guard<mutex> lk(mMut);
 
     if (mIsClosed) {
@@ -323,7 +328,7 @@ Return<void> Tuner::getProgramInformation_1_1(getProgramInformation_1_1_cb _hidl
 }
 
 Return<ProgramListResult> Tuner::startBackgroundScan() {
-    ALOGV("%s", __func__);
+    ALOGD("%s", __func__);
     lock_guard<mutex> lk(mMut);
     if (mIsClosed) return ProgramListResult::NOT_INITIALIZED;
 
@@ -332,7 +337,7 @@ Return<ProgramListResult> Tuner::startBackgroundScan() {
 
 Return<void> Tuner::getProgramList(const hidl_vec<VendorKeyValue>& vendorFilter,
                                    getProgramList_cb _hidl_cb) {
-    ALOGV("%s(%s)", __func__, toString(vendorFilter).substr(0, 100).c_str());
+    ALOGD("%s(%s)", __func__, toString(vendorFilter).substr(0, 100).c_str());
     lock_guard<mutex> lk(mMut);
     if (mIsClosed) {
         _hidl_cb(ProgramListResult::NOT_INITIALIZED, {});
@@ -345,7 +350,7 @@ Return<void> Tuner::getProgramList(const hidl_vec<VendorKeyValue>& vendorFilter,
 }
 
 Return<Result> Tuner::setAnalogForced(bool isForced) {
-    ALOGV("%s", __func__);
+    ALOGD("%s", __func__);
     lock_guard<mutex> lk(mMut);
     if (mIsClosed) return Result::NOT_INITIALIZED;
 //TODO ENABLE/DISABLE HD
@@ -354,7 +359,7 @@ Return<Result> Tuner::setAnalogForced(bool isForced) {
 }
 
 Return<void> Tuner::isAnalogForced(isAnalogForced_cb _hidl_cb) {
-    ALOGV("%s", __func__);
+    ALOGD("%s", __func__);
     lock_guard<mutex> lk(mMut);
 
     if (mIsClosed) {

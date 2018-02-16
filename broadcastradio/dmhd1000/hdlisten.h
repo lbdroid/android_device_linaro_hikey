@@ -34,11 +34,12 @@ class HDListen {
 //		 jclass j_cls;
 		android::hardware::broadcastradio::V1_1::ProgramSelector ps;
 		android::hardware::broadcastradio::V1_1::ProgramInfo pi;
-		android::sp<android::hardware::broadcastradio::V1_1::ITunerCallback> cb;
+		android::sp<android::hardware::broadcastradio::V1_0::ITunerCallback> cb;
 
 		string rds_ps;
 		string rds_rt;
 		string rds_genre;
+		bool nocb;
 
 	public:
 		HDListen();
@@ -49,7 +50,8 @@ class HDListen {
 		void passCB(
 			android::hardware::broadcastradio::V1_1::ProgramSelector,
 			android::hardware::broadcastradio::V1_1::ProgramInfo,
-			android::sp<android::hardware::broadcastradio::V1_1::ITunerCallback>&
+			const android::sp<android::hardware::broadcastradio::V1_0::ITunerCallback>&
+//			android::sp<android::hardware::broadcastradio::V1_1::ITunerCallback>&
 		);
 		void listenthread();
 		void listentoradio();

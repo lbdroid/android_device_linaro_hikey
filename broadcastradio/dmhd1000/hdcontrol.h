@@ -34,7 +34,8 @@ class HDControl {
 		void passCB(
 			android::hardware::broadcastradio::V1_1::ProgramSelector,
 			android::hardware::broadcastradio::V1_1::ProgramInfo,
-			android::sp<android::hardware::broadcastradio::V1_1::ITunerCallback>
+			const android::sp<android::hardware::broadcastradio::V1_0::ITunerCallback>&
+			//android::sp<android::hardware::broadcastradio::V1_1::ITunerCallback>
 		);
 //		void passJvm(JavaVM *, jclass);
 		void close();
