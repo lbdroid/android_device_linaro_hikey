@@ -513,7 +513,7 @@ nmea_reader_parse( NmeaReader*  r )
 
     gettimeofday(&tv, NULL);
     if (_gps_state->init)
-        _gps_state->callbacks->nmea_cb(tv.tv_sec*1000+tv.tv_usec/1000, r->in, r->pos);
+        _gps_state->callbacks->nmea_cb(tv.tv_sec*1000+tv.tv_usec/1000, r->in, r->pos +1);
 
     nmea_tokenizer_init(tzer, r->in, r->in + r->pos);
 #if GPS_DEBUG
@@ -732,6 +732,7 @@ nmea_reader_addc( NmeaReader*  r, int  c )
     r->pos       += 1;
 
     if (c == '\n') {
+        r->in[r->pos + 1] = 0; // null terminate the string
         nmea_reader_parse( r );
         r->pos = 0;
     }
