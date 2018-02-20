@@ -57,6 +57,7 @@
 #define AUDIO_PARAMETER_CARD "card"
 
 #define AUDIO_PARAMETER_LINEIN "line_in_ctl"
+#define AUDIO_PARAMETER_RADIO_VOL "broadcastradio_volume"
 
 #define AUDIO_PARAMETER_CONNECT "connect"
 #define AUDIO_PARAMETER_DISCONNECT "disconnect"
@@ -154,6 +155,7 @@ struct audio_device {
     bool terminate_sco;
 
     struct mixer *hw_mixer;
+    pthread_mutex_t mixer_lock;
     float *vol_balance;
     float master_volume;
 };
@@ -1215,6 +1217,8 @@ static void adev_close_input_stream(struct audio_hw_device *hw_dev,
 
 void set_line_in(struct audio_hw_device *hw_dev){
     struct audio_device * adev = (struct audio_device *)hw_dev;
+    if (adev->usbcard < 0) return;
+    pthread_mutex_lock(&adev->mixer_lock);
     if (adev->hw_mixer == 0) adev->hw_mixer = mixer_open(adev->usbcard);
     if (adev->hw_mixer == 0) return;
     struct mixer_ctl *line_in_ctl = mixer_get_ctl_by_name(adev->hw_mixer, "Line Playback Switch");
@@ -1226,6 +1230,7 @@ void set_line_in(struct audio_hw_device *hw_dev){
         mixer_ctl_set_value(line_in_ctl, 0, 0);
         property_set("service.broadcastradio.on", "0");
     }
+    pthread_mutex_unlock(&adev->mixer_lock);
 }
 
 void stereo_to_mono(int16_t *stereo, int16_t *mono, size_t samples){
@@ -1536,6 +1541,8 @@ void set_hfp_volume(struct audio_hw_device *hw_dev, int volume)
     // value of volume will be between 1 and 15 inclusive
 
     struct audio_device * adev = (struct audio_device *)hw_dev;
+    if (adev->usbcard < 0) return;
+    pthread_mutex_lock(&adev->mixer_lock);
     if (adev->hw_mixer == 0) adev->hw_mixer = mixer_open(adev->usbcard);
     if (adev->hw_mixer == 0) return;
     struct mixer_ctl *vol_ctl = mixer_get_ctl_by_name(adev->hw_mixer, "Speaker Playback Volume");
@@ -1547,6 +1554,26 @@ void set_hfp_volume(struct audio_hw_device *hw_dev, int volume)
         if (i < 2) mixer_ctl_set_value(vol_ctl, i, (int)((float) max * ((float)volume / 15.0)));
         else mixer_ctl_set_value(vol_ctl, i, 0);
     }
+    pthread_mutex_unlock(&adev->mixer_lock);
+}
+
+void set_radio_volume(struct audio_hw_device *hw_dev, int volume)
+{
+    // value of volume will be between 0 and 15 inclusive
+    struct audio_device * adev = (struct audio_device *)hw_dev;
+    if (adev->usbcard < 0) return;
+    pthread_mutex_lock(&adev->mixer_lock);
+    if (adev->hw_mixer == 0) adev->hw_mixer = mixer_open(adev->usbcard);
+    if (adev->hw_mixer == 0) return;
+    struct mixer_ctl *vol_ctl = mixer_get_ctl_by_name(adev->hw_mixer, "Line Playback Volume");
+    int max = mixer_ctl_get_range_max(vol_ctl);
+    int size = mixer_ctl_get_num_values(vol_ctl);
+    int i;
+
+    for (i=0; i<size; i++){
+        mixer_ctl_set_value(vol_ctl, i, (int)((float) max * ((float)volume / 15.0)));
+    }
+    pthread_mutex_unlock(&adev->mixer_lock);
 }
 
 /*
@@ -1557,6 +1584,8 @@ static int adev_set_master_volume(struct audio_hw_device *hw_dev, float volume)
     // value of volume will be between 0.0 and 1.0 inclusive
 
     struct audio_device * adev = (struct audio_device *)hw_dev;
+    if (adev->usbcard < 0) return 0;
+    pthread_mutex_lock(&adev->mixer_lock);
     if (adev->hw_mixer == 0) adev->hw_mixer = mixer_open(adev->usbcard);
     if (adev->hw_mixer == 0) return 0;
     struct mixer_ctl *vol_ctl = mixer_get_ctl_by_name(adev->hw_mixer, "Speaker Playback Volume");
@@ -1577,18 +1606,22 @@ static int adev_set_master_volume(struct audio_hw_device *hw_dev, float volume)
     for (i=0; i<size; i++)
         mixer_ctl_set_value(vol_ctl, i, (int)((float) max * adev->vol_balance[i] * volume));
 
+    pthread_mutex_unlock(&adev->mixer_lock);
     return 0; // any return value other than 0 means that master volume becomes software emulated.
 }
 
 void adev_set_mic_volume(struct audio_hw_device *hw_dev, int percent)
 {
     struct audio_device * adev = (struct audio_device *)hw_dev;
+    if (adev->usbcard < 0) return;
+    pthread_mutex_lock(&adev->mixer_lock);
     if (adev->hw_mixer == 0) adev->hw_mixer = mixer_open(adev->usbcard);
     if (adev->hw_mixer == 0) return;
     struct mixer_ctl *vol_ctl = mixer_get_ctl_by_name(adev->hw_mixer, "Mic Capture Volume");
     int max = mixer_ctl_get_range_max(vol_ctl);
 
     mixer_ctl_set_value(vol_ctl, 0, max * percent / 100);
+    pthread_mutex_unlock(&adev->mixer_lock);
 }
 
 static int adev_set_parameters(struct audio_hw_device *hw_dev, const char *kvpairs)
@@ -1650,23 +1683,11 @@ static int adev_set_parameters(struct audio_hw_device *hw_dev, const char *kvpai
         set_line_in(hw_dev);
     }
 
-    // TODO: This isn't the right way to do this, because the AMFM radio won't "mute" like this.
-    // Also (need to test) might cause the microphone to be echoed out the speakers.
-/*    ret = str_parms_get_str(parms, AUDIO_PARAMETER_CONNECT, value, sizeof(value));
+    ret = str_parms_get_str(parms, AUDIO_PARAMETER_RADIO_VOL, value, sizeof(value));
     if (ret >= 0){
-        if (strcmp(value, "-2147475456") == 0){
-            adev->line_in = true;
-            set_line_in(hw_dev);
-        }
+        val = atoi(value);
+        set_radio_volume(hw_dev, val); // val is always 0-15 inclusive
     }
-*/
-/*    ret = str_parms_get_str(parms, AUDIO_PARAMETER_DISCONNECT, value, sizeof(value));
-    if (ret >= 0){
-        if (strcmp(value, "-2147475456") == 0){
-            adev->line_in = false;
-            set_line_in(hw_dev);
-        }
-    }*/
 
     return 0;
 }
@@ -1799,7 +1820,9 @@ static int adev_open(const hw_module_t* module, const char* name, hw_device_t** 
     adev->line_in = false;
     adev->hw_mixer = 0;
     adev->vol_balance = 0;
-    adev->master_volume = (float)0.5;
+    adev->master_volume = 1.0;
+
+    adev->usbcard = -1;
 
     *device = &adev->hw_device.common;
 
