@@ -50,4 +50,5 @@ PRODUCT_BRAND := Android
 PRODUCT_MODEL := AOSP CAR on hikey960
 
 PRODUCT_PROPERTY_OVERRIDES += \
-    android.car.drawer.unlimited=true
+    android.car.drawer.unlimited=true \
+    service.adb.tcp.port=5555
