@@ -84,7 +84,6 @@ PRODUCT_PACKAGES += \
     LocalMediaPlayer \
     CarMediaApp \
     CarMessengerApp \
-    CarMapsPlaceholder \
     CarLatinIME \
     CarUsbHandler \
     android.car \
