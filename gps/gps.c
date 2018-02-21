@@ -261,7 +261,7 @@ nmea_reader_update_utc_diff( NmeaReader*  r )
                24*(tm_utc.tm_yday +
                365*tm_utc.tm_year)));
 
-    r->utc_diff = time_utc - time_local;
+    r->utc_diff = time_local - time_utc;
 }
 
 
