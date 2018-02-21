@@ -401,6 +401,7 @@ nmea_reader_update_latlong( NmeaReader*  r,
     r->fix.flags    |= GPS_LOCATION_HAS_LAT_LONG;
     r->fix.latitude  = lat;
     r->fix.longitude = lon;
+    if (r->fix.latitude == 0.0 && r->fix.longitude == 0.0) return -1;
     return 0;
 }
 
@@ -432,9 +433,6 @@ static int nmea_reader_update_accuracy( NmeaReader*  r,
         return -1;
 
     r->fix.accuracy = str2float(tok.p, tok.end);
-    if (r->fix.accuracy == 99.99){
-      return 0;
-    }
 
     r->fix.flags   |= GPS_LOCATION_HAS_ACCURACY;
     return 0;
@@ -469,6 +467,7 @@ nmea_reader_update_speed( NmeaReader*  r,
 
     r->fix.flags   |= GPS_LOCATION_HAS_SPEED;
     r->fix.speed    = str2float(tok.p, tok.end) * 1.852 / 3.6;
+    if (r->fix.speed < 0.5) r->fix.speed = 0.0; // all speed under 0.5 m/s = 1.8 kph now 0.0.
     return 0;
 }
 
@@ -504,6 +503,7 @@ nmea_reader_parse( NmeaReader*  r )
     NmeaTokenizer  tzer[1];
     Token          tok;
     struct timeval tv;
+    bool fixvalid = false;
 
     D("Received: '%.*s'", r->pos, r->in);
     if (r->pos < 9) {
@@ -541,15 +541,19 @@ nmea_reader_parse( NmeaReader*  r )
         Token  tok_latitudeHemi  = nmea_tokenizer_get(tzer,3);
         Token  tok_longitude     = nmea_tokenizer_get(tzer,4);
         Token  tok_longitudeHemi = nmea_tokenizer_get(tzer,5);
-        Token  tok_accuracy      = nmea_tokenizer_get(tzer,8);
+        Token  tok_fixq          = nmea_tokenizer_get(tzer,6); // 0 = invalid, 1 = GPS, 2 = Differential GPS
+        Token  tok_numsat        = nmea_tokenizer_get(tzer,7); // number of satellites used in fix
+        Token  tok_accuracy      = nmea_tokenizer_get(tzer,8); // HDOP
         Token  tok_altitude      = nmea_tokenizer_get(tzer,9);
         Token  tok_altitudeUnits = nmea_tokenizer_get(tzer,10);
 
+        if (tok_fixq.p[0] != '0') fixvalid = true;
+
         nmea_reader_update_time(r, tok_time);
-        nmea_reader_update_latlong(r, tok_latitude,
+        if (nmea_reader_update_latlong(r, tok_latitude,
                                       tok_latitudeHemi.p[0],
                                       tok_longitude,
-                                      tok_longitudeHemi.p[0]);
+                                      tok_longitudeHemi.p[0]) == -1) fixvalid = false;
         nmea_reader_update_altitude(r, tok_altitude, tok_altitudeUnits);
 
         nmea_reader_update_accuracy(r, tok_accuracy);
@@ -574,6 +578,8 @@ nmea_reader_parse( NmeaReader*  r )
         Token tok_pdop = nmea_tokenizer_get(tzer,15);
         Token tok_hdop = nmea_tokenizer_get(tzer,16);
         Token tok_vdop = nmea_tokenizer_get(tzer,17);
+
+        if (tok_fix.p[0] != '1') fixvalid = true;
 
 	nmea_reader_update_accuracy(r, tok_hdop);
 	
@@ -703,7 +709,7 @@ nmea_reader_parse( NmeaReader*  r )
         D("%s\n", temp);
     }
 #endif
-    if (r->fix.flags & GPS_LOCATION_HAS_ACCURACY) {
+    if (fixvalid){
         if (_gps_state->callbacks->location_cb) {
             _gps_state->callbacks->location_cb( &r->fix );
             r->fix.flags = 0;
